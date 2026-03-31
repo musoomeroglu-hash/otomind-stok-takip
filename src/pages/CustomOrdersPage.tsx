@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { formatCurrency, formatDate, getStatusColor, getStatusLabel } from '../utils/helpers';
 import type { CustomOrder } from '../types';
-import { CAR_BRANDS, ORDER_STATUSES } from '../types';
+import { ORDER_STATUSES } from '../types';
 import Toast from '../components/Toast';
 import Modal from '../components/Modal';
 
 const empty: Omit<CustomOrder, 'id' | 'createdAt'> = {
-  customerName: '', customerPhone: '', carBrand: '', carModel: '', carYear: '',
+  customerName: '', customerPhone: '', carBrand: '', carModel: '', carYear: '', vehicleInfo: '',
   productType: 'kilif', fabricType: '', pattern: '', color: '', notes: '',
   materialId: '', materialAmount: 5, deductMaterial: true,
   status: 'beklemede', orderDate: new Date().toISOString().split('T')[0],
@@ -26,7 +26,8 @@ export default function CustomOrdersPage() {
 
   const filtered = customOrders.filter(o => {
     const q = search.toLowerCase();
-    const matchSearch = !q || o.customerName.toLowerCase().includes(q) || o.carBrand.toLowerCase().includes(q) || o.carModel.toLowerCase().includes(q);
+    const vInfo = o.vehicleInfo || `${o.carBrand} ${o.carModel} ${o.carYear}`;
+    const matchSearch = !q || o.customerName.toLowerCase().includes(q) || vInfo.toLowerCase().includes(q);
     const matchStatus = !filterStatus || o.status === filterStatus;
     return matchSearch && matchStatus;
   }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -35,8 +36,11 @@ export default function CustomOrdersPage() {
   function openEdit(o: CustomOrder) { setForm({ ...o }); setEditItem(o); setShowModal(true); }
 
   function handleSave() {
-    if (!form.customerName || !form.carBrand || !form.carModel) {
-      setToast({ msg: 'Müşteri adı, araç markası ve modeli zorunludur', type: 'error' }); return;
+    if (!form.customerName) {
+      setToast({ msg: 'Müşteri adı zorunludur', type: 'error' }); return;
+    }
+    if (!form.vehicleInfo && !form.carBrand) {
+      setToast({ msg: 'Araç bilgisi zorunludur', type: 'error' }); return;
     }
     if (editItem) { updateCustomOrder(editItem.id, form); setToast({ msg: 'Sipariş güncellendi', type: 'success' }); }
     else { addCustomOrder(form); setToast({ msg: 'Sipariş eklendi', type: 'success' }); }
@@ -112,7 +116,9 @@ export default function CustomOrdersPage() {
             <div className="bg-overlay-light rounded-xl p-3 space-y-1.5">
               <div className="flex items-center gap-2 text-sm">
                 <span className="material-symbols-outlined text-primary text-[16px]">directions_car</span>
-                <span className="text-muted-light">{order.carBrand} {order.carModel} {order.carYear && `(${order.carYear})`}</span>
+                <span className="text-muted-light">
+                  {order.vehicleInfo || [order.carBrand, order.carModel, order.carYear].filter(Boolean).join(' ')}
+                </span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="material-symbols-outlined text-muted-dark text-[16px]">texture</span>
@@ -205,23 +211,19 @@ export default function CustomOrdersPage() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <span className="material-symbols-outlined text-blue-400 text-[18px]">directions_car</span>
-              <h3 className="text-main text-sm font-medium">Araç Bilgileri</h3>
+              <h3 className="text-main text-sm font-medium">Araç Bilgisi</h3>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="text-xs text-muted mb-1 block">Araç Markası *</label>
-                <select value={form.carBrand} onChange={e => setForm(f => ({ ...f, carBrand: e.target.value }))} className="input-field w-full">
-                  <option value="">Seç</option>
-                  {CAR_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Araç Modeli *</label>
-                <input value={form.carModel} onChange={e => setForm(f => ({ ...f, carModel: e.target.value }))} className="input-field w-full" placeholder="Örn: Corolla" />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Model Yılı</label>
-                <input value={form.carYear} onChange={e => setForm(f => ({ ...f, carYear: e.target.value }))} className="input-field w-full" placeholder="Örn: 2022" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="text-xs text-muted mb-1 block">Araç Marka / Model / Yıl *</label>
+                <input 
+                  value={form.vehicleInfo || (form.carBrand ? `${form.carBrand} ${form.carModel} ${form.carYear}`.trim() : '')} 
+                  onChange={e => {
+                    setForm(f => ({ ...f, vehicleInfo: e.target.value, carBrand: '', carModel: '', carYear: '' }))
+                  }} 
+                  className="input-field w-full" 
+                  placeholder="Serbest metin: Örn, 2022 Toyota Corolla Beyaz" 
+                />
               </div>
             </div>
           </div>
@@ -233,15 +235,7 @@ export default function CustomOrdersPage() {
               <h3 className="text-main text-sm font-medium">Sipariş Detayları</h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted mb-1 block">Ürün Tipi</label>
-                <select value={form.productType} onChange={e => setForm(f => ({ ...f, productType: e.target.value as CustomOrder['productType'] }))} className="input-field w-full">
-                  <option value="kilif">Koltuk Kılıfı</option>
-                  <option value="minder">Oto Minderi</option>
-                  <option value="aksesuar">Aksesuar</option>
-                  <option value="set">Set</option>
-                </select>
-              </div>
+
               <div className="sm:col-span-2 p-3 bg-overlay-light border border-divider rounded-xl">
                  <div className="flex items-center justify-between mb-3 border-b border-divider-light pb-2">
                    <p className="text-sm font-medium text-main">Gerçek Stoktan Hammadde Düş</p>
@@ -269,7 +263,7 @@ export default function CustomOrdersPage() {
                      </div>
                      <div>
                        <label className="text-xs text-muted mb-1 block">Giden Metre/Adet</label>
-                       <input type="number" step="0.5" min="0" value={form.materialAmount} onChange={e => setForm(f => ({ ...f, materialAmount: Number(e.target.value) }))} className="input-field w-full" />
+                       <input type="number" step="0.1" min="0" value={form.materialAmount} onChange={e => setForm(f => ({ ...f, materialAmount: Number(e.target.value) }))} className="input-field w-full" />
                      </div>
                    </div>
                  )}

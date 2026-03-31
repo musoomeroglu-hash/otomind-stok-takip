@@ -20,6 +20,9 @@ interface DataContextType {
   addSalesChannel: (channel: string) => Promise<void>;
   deleteSalesChannel: (channel: string) => Promise<void>;
   whatsappConfig: WhatsappConfig;
+  firmaBilgileri: any;
+  updateFirmaBilgileri: (info: any) => Promise<void>;
+  usdRate: number | null;
   loading: boolean;
   addProduct: (p: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateProduct: (id: string, p: Partial<Product>) => void;
@@ -154,6 +157,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [materialTypes, setMaterialTypes] = useState<CustomMaterialType[]>([]);
   const [salesChannels, setSalesChannels] = useState<string[]>(['website', 'hepsiburada', 'n11', 'bayi', 'cimri']); // varsayılan
   const [whatsappConfig, setWhatsappConfig] = useState<WhatsappConfig>({ phone: '', apikey: '' });
+  const [firmaBilgileri, setFirmaBilgileri] = useState<any>({});
+  const [usdRate, setUsdRate] = useState<number | null>(null);
 
   // ---- INITIAL LOAD ----
   useEffect(() => {
@@ -208,6 +213,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
           if (configData?.value) setWhatsappConfig(configData.value);
         } catch(e) { /* ignore single error */ }
 
+        // Firma Bilgileri
+        try {
+          const { data: firmaData } = await supabase.from(DB_TABLES.app_config).select('*').eq('key', 'firma_bilgileri').single();
+          if (firmaData?.value) setFirmaBilgileri(firmaData.value);
+        } catch(e) { /* ignore single error */ }
+
+        // USD Rate Fetch
+        try {
+          const cached = localStorage.getItem('otomind_usd_rate');
+          const cacheTime = localStorage.getItem('otomind_usd_time');
+          const nowMs = Date.now();
+          if (cached && cacheTime && (nowMs - Number(cacheTime)) < 3600000) {
+            setUsdRate(Number(cached));
+          } else {
+            const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+            const data = await res.json();
+            if (data?.rates?.TRY) {
+              setUsdRate(data.rates.TRY);
+              localStorage.setItem('otomind_usd_rate', data.rates.TRY.toString());
+              localStorage.setItem('otomind_usd_time', nowMs.toString());
+            }
+          }
+        } catch(e) { console.error('USD fetch error', e); }
+
       } catch (err) {
         console.error('Veri yüklenirken hata:', err);
       } finally {
@@ -258,20 +287,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (isSupabaseConfigured()) await sbInsert(DB_TABLES.cash_entries, cashItem);
     }
 
-    // Kumaş stoktan düşme işlemi
-    if (o.deductMaterial && o.materialId && (o.materialAmount || 0) > 0) {
-      const deductAmt = o.materialAmount!;
-      setMaterials(prevMat => {
-        const mat = prevMat.find(m => m.id === o.materialId);
-        if (mat) {
-          const newQty = Math.max(0, mat.stockQty - deductAmt);
-          if (isSupabaseConfigured()) {
-            sbUpdate(DB_TABLES.materials, mat.id, { stockQty: newQty });
+    // Kumaş stoktan düşme işlemi (Negatife inebilir)
+    if (o.deductMaterial) {
+      if (o.materialId && (o.materialAmount || 0) > 0) {
+        const deductAmt = Number(o.materialAmount) || 0;
+        setMaterials(prevMat => {
+          const mat = prevMat.find(m => m.id === o.materialId);
+          if (mat) {
+            const newQty = mat.stockQty - deductAmt;
+            if (isSupabaseConfigured()) {
+              sbUpdate(DB_TABLES.materials, mat.id, { stockQty: newQty });
+            }
+            return prevMat.map(m => m.id === mat.id ? { ...m, stockQty: newQty } : m);
           }
-          return prevMat.map(m => m.id === mat.id ? { ...m, stockQty: newQty } : m);
-        }
-        return prevMat;
-      });
+          return prevMat;
+        });
+      }
+      // Ek hammaddelerden düşme
+      if (o.extraMaterials && o.extraMaterials.length > 0) {
+        o.extraMaterials.forEach(em => {
+          if (em.materialId && em.amount > 0) {
+            setMaterials(prevMat => {
+              const mat = prevMat.find(m => m.id === em.materialId);
+              if (mat) {
+                const newQty = mat.stockQty - Number(em.amount);
+                if (isSupabaseConfigured()) {
+                  sbUpdate(DB_TABLES.materials, mat.id, { stockQty: newQty });
+                }
+                return prevMat.map(m => m.id === mat.id ? { ...m, stockQty: newQty } : m);
+              }
+              return prevMat;
+            });
+          }
+        });
+      }
     }
   }, []);
 
@@ -405,29 +454,64 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await sbInsert(DB_TABLES.cash_entries, cashItem);
     }
 
-    // Kumaş stoktan düşme (Sıfırdan Üretim)
+    // Hammaddeleri ürün özelliklerine göre stoktan düşme (Sıfırdan Üretim) (Negatife inebilir)
     if (s.deductMaterial) {
       setProducts(prevProducts => {
         const product = prevProducts.find(p => p.name === s.productName);
-        if (product && product.materialId && (product.materialAmount || 0) > 0) {
-           const deductAmt = product.materialAmount! * s.quantity;
-           const matId = product.materialId;
-           
-           setMaterials(prevMat => {
-             const mat = prevMat.find(m => m.id === matId);
-             if (mat) {
-               const newQty = Math.max(0, mat.stockQty - deductAmt);
-               if (isSupabaseConfigured()) {
-                 sbUpdate(DB_TABLES.materials, matId, { stockQty: newQty });
-               }
-               return prevMat.map(m => m.id === matId ? { ...m, stockQty: newQty } : m);
-             }
-             return prevMat;
-           });
+        if (product) {
+          // 1. Kumaşı düş
+          if (product.materialId && (product.materialAmount || 0) > 0) {
+            const deductAmt = Number(product.materialAmount) * s.quantity;
+            const matId = product.materialId;
+            setMaterials(prevMat => {
+              const mat = prevMat.find(m => m.id === matId);
+              if (mat) {
+                const newQty = mat.stockQty - deductAmt;
+                if (isSupabaseConfigured()) {
+                  sbUpdate(DB_TABLES.materials, matId, { stockQty: newQty });
+                }
+                return prevMat.map(m => m.id === matId ? { ...m, stockQty: newQty } : m);
+              }
+              return prevMat;
+            });
+          }
+          // 2. Ek hammaddeleri (extraMaterials) düş
+          if (product.extraMaterials && product.extraMaterials.length > 0) {
+            product.extraMaterials.forEach(em => {
+              if (em.materialId && em.amount > 0) {
+                const deductAmt = Number(em.amount) * s.quantity;
+                setMaterials(prevMat => {
+                  const mat = prevMat.find(m => m.id === em.materialId || m.type === em.materialId);
+                  if (mat) {
+                    const newQty = mat.stockQty - deductAmt;
+                    if (isSupabaseConfigured()) {
+                      sbUpdate(DB_TABLES.materials, mat.id, { stockQty: newQty });
+                    }
+                    return prevMat.map(m => m.id === mat.id ? { ...m, stockQty: newQty } : m);
+                  }
+                  return prevMat;
+                });
+              }
+            });
+          }
         }
-        return prevProducts; // Product'ın kendisinde değişiklik yapmıyoruz
+        return prevProducts; // Product'ın kendisinde hammadde için değişiklik yapmıyoruz
       });
     }
+
+    // Ürünün kendi stoğunu her halükarda satış miktarında düşür (Eksiye düşebilir)
+    setProducts(prevProducts => {
+      const product = prevProducts.find(p => p.name === s.productName);
+      if (product) {
+        const newStock = product.stock - s.quantity;
+        if (isSupabaseConfigured()) {
+          sbUpdate(DB_TABLES.products, product.id, { stock: newStock });
+        }
+        return prevProducts.map(p => p.id === product.id ? { ...p, stock: newStock } : p);
+      }
+      return prevProducts;
+    });
+
   }, []);
 
   const deleteSale = useCallback(async (id: string) => {
@@ -619,9 +703,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // --- FIRMA BILGILERI CONFIG ---
+  const updateFirmaBilgileri = useCallback(async (info: any) => {
+    setFirmaBilgileri(info);
+    if (isSupabaseConfigured()) {
+      await supabase.from(DB_TABLES.app_config).upsert({ key: 'firma_bilgileri', value: info }, { onConflict: 'key' });
+    }
+  }, []);
+
   return (
     <DataContext.Provider value={{
-      products, customOrders, materials, accounts, cariTransactions, suppliers, sales, purchases, cashEntries, reminders, calendarEvents, materialTypes, whatsappConfig, loading,
+      products, customOrders, materials, accounts, cariTransactions, suppliers, sales, purchases, cashEntries, reminders, calendarEvents, materialTypes, whatsappConfig, firmaBilgileri, updateFirmaBilgileri, usdRate, loading,
       addProduct, updateProduct, deleteProduct,
       addCustomOrder, updateCustomOrder, deleteCustomOrder,
       addMaterial, updateMaterial, deleteMaterial,

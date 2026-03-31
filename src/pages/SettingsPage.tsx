@@ -3,15 +3,25 @@ import { useData } from '../contexts/DataContext';
 import Toast from '../components/Toast';
 
 export default function SettingsPage() {
-  const { materialTypes, materials, addMaterialType, deleteMaterialType, salesChannels, addSalesChannel, deleteSalesChannel, whatsappConfig, updateWhatsappConfig } = useData();
+  const { materialTypes, materials, addMaterialType, deleteMaterialType, salesChannels, addSalesChannel, deleteSalesChannel, whatsappConfig, updateWhatsappConfig, firmaBilgileri, updateFirmaBilgileri } = useData();
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [newChannelLabel, setNewChannelLabel] = useState('');
   const [waPhone, setWaPhone] = useState(whatsappConfig?.phone || '');
   const [waApiKey, setWaApiKey] = useState(whatsappConfig?.apikey || '');
+  
+  const [firma, setFirma] = useState({
+    firmaAdi: firmaBilgileri?.firmaAdi || '',
+    vergiNo: firmaBilgileri?.vergiNo || '',
+    vergiDairesi: firmaBilgileri?.vergiDairesi || '',
+    adres: firmaBilgileri?.adres || '',
+    telefon: firmaBilgileri?.telefon || '',
+    email: firmaBilgileri?.email || ''
+  });
+
   const importRef = useRef<HTMLInputElement>(null);
 
-  const ALL_KEYS = ['products', 'customOrders', 'materials', 'accounts', 'cariTransactions', 'suppliers', 'sales', 'purchases', 'cashEntries', 'reminders', 'calendarEvents', 'materialTypes', 'whatsappConfig'];
+  const ALL_KEYS = ['products', 'customOrders', 'materials', 'accounts', 'cariTransactions', 'suppliers', 'sales', 'purchases', 'cashEntries', 'reminders', 'calendarEvents', 'materialTypes', 'whatsappConfig', 'firmaBilgileri'];
 
   function clearData() {
     if (window.confirm("TÜM VERİLERİ silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
@@ -111,6 +121,11 @@ export default function SettingsPage() {
   function handleSaveWhatsapp() {
     updateWhatsappConfig({ phone: waPhone.trim(), apikey: waApiKey.trim() });
     setToast({ msg: 'WhatsApp ayarları kaydedildi', type: 'success' });
+  }
+
+  function handleSaveFirma() {
+    updateFirmaBilgileri(firma);
+    setToast({ msg: 'Firma bilgileri kaydedildi', type: 'success' });
   }
 
   return (
@@ -218,6 +233,51 @@ export default function SettingsPage() {
               <button onClick={clearData} className="btn-press flex items-center justify-center gap-2 w-full bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500 hover:text-main transition-colors py-2.5 rounded-xl text-sm font-bold">
                 <span className="material-symbols-outlined text-[20px]">delete_forever</span>
                 Tüm Verileri Sıfırla
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        {/* Firma Bilgileri */}
+        <div className="glass-panel p-6 rounded-2xl space-y-6 md:col-span-2">
+          <div className="flex items-center gap-3 border-b border-divider-light pb-4">
+            <span className="material-symbols-outlined text-blue-400">business</span>
+            <h2 className="text-lg font-semibold text-main">Firma Bilgileri</h2>
+          </div>
+          <div className="bg-overlay border border-divider rounded-xl p-5 space-y-4">
+            <p className="text-sm text-muted-light">Sistem genelinde (örneğin yazdırılan belgelerde) görünecek firma bilgilerinizi buradan girebilirsiniz.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted mb-1 block">Firma Adı / Ünvanı</label>
+                <input value={firma.firmaAdi} onChange={e => setFirma(f => ({ ...f, firmaAdi: e.target.value }))} className="w-full bg-overlay border border-divider rounded-xl px-4 py-2 text-sm text-main focus:outline-none focus:border-blue-500/50" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted mb-1 block">Vergi Dairesi</label>
+                  <input value={firma.vergiDairesi} onChange={e => setFirma(f => ({ ...f, vergiDairesi: e.target.value }))} className="w-full bg-overlay border border-divider rounded-xl px-4 py-2 text-sm text-main focus:outline-none focus:border-blue-500/50" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted mb-1 block">Vergi No / TCKN</label>
+                  <input maxLength={11} value={firma.vergiNo} onChange={e => setFirma(f => ({ ...f, vergiNo: e.target.value.replace(/[^0-9]/g, '') }))} className="w-full bg-overlay border border-divider rounded-xl px-4 py-2 text-sm text-main focus:outline-none focus:border-blue-500/50" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted mb-1 block">E-posta Adresi</label>
+                <input value={firma.email} onChange={e => setFirma(f => ({ ...f, email: e.target.value }))} className="w-full bg-overlay border border-divider rounded-xl px-4 py-2 text-sm text-main focus:outline-none focus:border-blue-500/50" />
+              </div>
+              <div>
+                <label className="text-xs text-muted mb-1 block">Telefon Numarası</label>
+                <input value={firma.telefon} onChange={e => setFirma(f => ({ ...f, telefon: e.target.value }))} className="w-full bg-overlay border border-divider rounded-xl px-4 py-2 text-sm text-main focus:outline-none focus:border-blue-500/50" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs text-muted mb-1 block">Açık Adres</label>
+                <textarea rows={2} value={firma.adres} onChange={e => setFirma(f => ({ ...f, adres: e.target.value }))} className="w-full bg-overlay border border-divider rounded-xl px-4 py-2 text-sm text-main focus:outline-none focus:border-blue-500/50 resize-none" />
+              </div>
+            </div>
+            <div className="flex justify-end pt-2">
+              <button onClick={handleSaveFirma} className="btn-press bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 px-5 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">save</span>
+                Firma Bilgilerini Kaydet
               </button>
             </div>
           </div>

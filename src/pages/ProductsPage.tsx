@@ -9,13 +9,13 @@ import * as XLSX from 'xlsx';
 
 const emptyProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
   name: '', category: 'kilif', skuCode: '', fabricType: 'jakar', color: '', pattern: '',
-  materialId: '', materialAmount: 0,
+  materialId: '', materialAmount: 0, extraMaterials: [],
   purchasePrice: 0, salePrice: 0, stock: 0, minStock: 2, isCustom: false,
   carBrand: '', carModel: '', carYear: '', channel: 'website', notes: '',
 };
 
 export default function ProductsPage() {
-  const { products, materials, salesChannels, addProduct, updateProduct, deleteProduct } = useData();
+  const { products, materials, materialTypes, salesChannels, addProduct, updateProduct, deleteProduct } = useData();
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
@@ -52,26 +52,33 @@ export default function ProductsPage() {
 
   function handleExportExcel() {
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(products.map(p => ({
-      'Ürün Adı': p.name,
-      'Kategori': p.category,
-      'Marka': p.carBrand || '',
-      'Model': p.carModel || '',
-      'Yıl': p.carYear || '',
-      'SKU': p.skuCode,
-      'Kumaş Türü': p.fabricType,
-      'Renk': p.color || '',
-      'Desen': p.pattern || '',
-      'Hammadde (Kumaş) ID': p.materialId || '',
-      'Kullanılan Metre': p.materialAmount || 0,
-      'Alış Fiyatı': p.purchasePrice,
-      'Satış Fiyatı': p.salePrice,
-      'Stok': p.stock,
-      'Min Stok': p.minStock,
-      'Satış Kanalı': p.channel,
-      'Notlar': p.notes || ''
-    })));
-    
+    const ws = XLSX.utils.json_to_sheet(products.map(p => {
+      const row: any = {
+        'Ürün Adı': p.name,
+        'Kategori': p.category,
+        'Marka': p.carBrand || '',
+        'Model': p.carModel || '',
+        'Yıl': p.carYear || '',
+        'SKU': p.skuCode,
+        'Kumaş Türü': p.fabricType,
+        'Renk': p.color || '',
+        'Desen': p.pattern || '',
+        'Hammadde (Kumaş) ID': p.materialId || '',
+        'Kullanılan Metre': p.materialAmount || 0,
+        'Alış Fiyatı': p.purchasePrice,
+        'Satış Fiyatı': p.salePrice,
+        'Stok': p.stock,
+        'Min Stok': p.minStock,
+        'Satış Kanalı': p.channel,
+        'Notlar': p.notes || ''
+      };
+      for(let i = 0; i < 7; i++) {
+        row[`Ek Hammadde ${i+1} ID`] = p.extraMaterials?.[i]?.materialId || '';
+        row[`Ek Hammadde ${i+1} Miktar`] = p.extraMaterials?.[i]?.amount || 0;
+      }
+      return row;
+    }));
+
     // Hammadde Listesi Sekmesi
     const materialsWs = XLSX.utils.json_to_sheet(materials.map(m => ({
       'Hammadde ID': m.id,
@@ -90,8 +97,7 @@ export default function ProductsPage() {
   function handleDownloadTemplate() {
     const wb = XLSX.utils.book_new();
     
-    // 1. Ürünler Şablonu
-    const templateData = [{
+    const rowTemplate: any = {
       'Ürün Adı': 'Örnek Koltuk Kılıfı',
       'SKU': 'KLF-001',
       'Kategori': 'kilif',
@@ -109,7 +115,12 @@ export default function ProductsPage() {
       'Min Stok': 2,
       'Satış Kanalı': 'website',
       'Notlar': 'Bu bir örnek satırdır.'
-    }];
+    };
+    for(let i=1; i<=7; i++) {
+      rowTemplate[`Ek Hammadde ${i} ID`] = '';
+      rowTemplate[`Ek Hammadde ${i} Miktar`] = 0;
+    }
+    const templateData = [rowTemplate];
     const wsUrunler = XLSX.utils.json_to_sheet(templateData);
 
     // 2. Referanslar
@@ -130,7 +141,11 @@ export default function ProductsPage() {
     aoa.push(['GERÇEK HAMMADDE/STOK KODLARI (Sistemdeki Kumaşlarınız)']);
     aoa.push(['HAMMADDE ID (Şablondaki Hammadde ID sütununa yazılır)', 'HAMMADDE ADI', 'STOK', 'BİRİM']);
     materials.forEach(m => aoa.push([m.id, m.name, m.stockQty, m.unit]));
-    
+    aoa.push([]);
+
+    aoa.push(['HAMMADDE TÜRLERİ (Ek Hammaddeler için kullanılır)']);
+    aoa.push(['TÜR KODU (Şablondaki Ek Hammadde ID sütunlarına yazılır)', 'TÜR ADI']);
+    materialTypes.forEach(t => aoa.push([t.value, t.label]));
     const wsReferanslar = XLSX.utils.aoa_to_sheet(aoa);
 
     XLSX.utils.book_append_sheet(wb, wsUrunler, "Ürün_Yükleme_Sayfası");
@@ -156,6 +171,12 @@ export default function ProductsPage() {
         let added = 0;
         rows.forEach(row => {
           if (!row['Ürün Adı'] || !row['SKU']) return; // Skip invalid rows
+          const extraMaterials: {materialId: string, amount: number}[] = [];
+          for (let i = 1; i <= 7; i++) {
+            const mId = row[`Ek Hammadde ${i} ID`];
+            const mAm = Number(row[`Ek Hammadde ${i} Miktar`]);
+            if (mId && mAm > 0) extraMaterials.push({ materialId: String(mId), amount: mAm });
+          }
           addProduct({
             name: row['Ürün Adı'] || '',
             category: row['Kategori'] || 'kilif',
@@ -168,6 +189,7 @@ export default function ProductsPage() {
             pattern: row['Desen'] || '',
             materialId: row['Hammadde (Kumaş) ID'] || '',
             materialAmount: Number(row['Kullanılan Metre']) || 0,
+            extraMaterials,
             purchasePrice: Number(row['Alış Fiyatı']) || 0,
             salePrice: Number(row['Satış Fiyatı']) || 0,
             stock: Number(row['Stok']) || 0,
@@ -267,9 +289,13 @@ export default function ProductsPage() {
                     <td className="px-4 py-3 font-mono text-xs text-muted">{p.skuCode}</td>
                     <td className="px-4 py-3 text-right text-sm text-main font-medium">{formatCurrency(p.salePrice)}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className={`text-sm font-bold ${isLow ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      <span className={`text-sm font-bold ${p.stock < 0 ? 'text-rose-400' : isLow ? 'text-amber-400' : 'text-emerald-400'}`}>
                         {p.stock}
-                        {isLow && <span className="material-symbols-outlined text-[14px] ml-1">warning</span>}
+                        {p.stock < 0 ? (
+                          <span className="material-symbols-outlined text-[14px] ml-1" title="Negatif Stok">error</span>
+                        ) : isLow ? (
+                          <span className="material-symbols-outlined text-[14px] ml-1" title="Kritik Stok">warning</span>
+                        ) : null}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -372,6 +398,42 @@ export default function ProductsPage() {
             <div className="lg:col-span-2">
               <label className="text-xs text-muted mb-1 block">Kullanılan Miktar {form.materialId ? materials.find(m => m.id === form.materialId)?.unit : '(Metre, Adet)'}</label>
               <input type="number" step="0.01" min="0" value={form.materialAmount === 0 ? '' : form.materialAmount} onChange={e => setForm(f => ({ ...f, materialAmount: Number(e.target.value) }))} className="input-field w-full" placeholder="Örn: 2" />
+            </div>
+
+            <div className="lg:col-span-4 border border-divider-light rounded-xl p-3 bg-overlay-light/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-main flex items-center gap-1"><span className="material-symbols-outlined text-[14px] text-blue-400">add_circle</span> Ek Hammaddeler (Maks 7)</label>
+                {(form.extraMaterials?.length || 0) < 7 && (
+                   <button onClick={() => setForm(f => ({ ...f, extraMaterials: [...(f.extraMaterials||[]), {materialId: '', amount: 0}] }))} className="text-[11px] text-blue-400 hover:text-blue-300 font-medium">+ Ekle</button>
+                )}
+              </div>
+              {form.extraMaterials?.map((em, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <select value={em.materialId} onChange={e => {
+                    const yeni = [...(form.extraMaterials||[])];
+                    yeni[idx].materialId = e.target.value;
+                    setForm(f => ({ ...f, extraMaterials: yeni }));
+                  }} className="input-field flex-1 !p-1.5 text-xs">
+                    <option value="">Tür Seçiniz</option>
+                    {materialTypes.map(t => (
+                      <option key={t.id} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                  <input type="number" step="0.01" min="0" value={em.amount} onChange={e => {
+                    const yeni = [...(form.extraMaterials||[])];
+                    yeni[idx].amount = Number(e.target.value);
+                    setForm(f => ({ ...f, extraMaterials: yeni }));
+                  }} className="input-field w-[80px] sm:w-[100px] !p-1.5 text-xs" placeholder="Miktar" />
+                  <button onClick={() => {
+                    const yeni = [...(form.extraMaterials||[])];
+                    yeni.splice(idx, 1);
+                    setForm(f => ({ ...f, extraMaterials: yeni }));
+                  }} className="p-1 text-muted hover:text-red-400"><span className="material-symbols-outlined text-[16px]">close</span></button>
+                </div>
+              ))}
+              {(!form.extraMaterials || form.extraMaterials.length === 0) && (
+                <p className="text-[10px] text-muted-dark italic">Siparişlerde bu ürün satıldığında ek hammaddeleri de stoktan düşebilirsiniz.</p>
+              )}
             </div>
 
             <div className="col-span-1 lg:col-span-2">

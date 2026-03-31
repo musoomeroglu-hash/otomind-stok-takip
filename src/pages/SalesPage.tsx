@@ -200,8 +200,8 @@ export default function SalesPage() {
             </div>
             
             <div className="sm:col-span-2 p-3 bg-overlay-light border border-divider rounded-xl">
-               <div className="flex items-center justify-between">
-                 <p className="text-sm font-medium text-main">Kumaş Stoktan Düşülsün mü?</p>
+               <div className="flex items-center justify-between mb-2">
+                 <p className="text-sm font-medium text-main">Bağlı Hammaddeler Stoktan Düşülsün mü?</p>
                  <button 
                    onClick={() => setForm(f => ({ ...f, deductMaterial: !f.deductMaterial }))}
                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${form.deductMaterial ? 'bg-emerald-500' : 'bg-slate-600'}`}
@@ -209,10 +209,10 @@ export default function SalesPage() {
                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${form.deductMaterial ? 'translate-x-5' : 'translate-x-1'}`} />
                  </button>
                </div>
-               <p className={`text-[11px] mt-1 ${form.deductMaterial ? 'text-emerald-400' : 'text-muted-dark italic'}`}>
+               <p className={`text-[11px] mt-1 leading-relaxed ${form.deductMaterial ? 'text-emerald-400' : 'text-muted-dark italic'}`}>
                  {form.deductMaterial 
-                  ? 'Sıfırdan Üretim: Ürün kayıtlarındaki atanmış kumaş tutarı stoğunuzdan düşülecektir.' 
-                  : 'Sadece satış işlenir, ürünün kumaşı hammadde stoğunuzdan düşülmez.'}
+                  ? 'Sıfırdan Üretim: Ürüne tanımlı tüm alt malzemeler (kumaş, poşet, elyaf vb.) stoklarınızdan otomatik eksiltilir.' 
+                  : 'Hazır Stoktan Teslim: Sadece satış onayı verilir, deponuzdaki bağlı hammadde ve materyallere hiçbir şekilde dokunulmaz.'}
                </p>
             </div>
           </div>

@@ -6,7 +6,7 @@ import Toast from '../components/Toast';
 import Modal from '../components/Modal';
 
 const emptyAccount: Omit<CariAccount, 'id' | 'createdAt' | 'updatedAt'> = {
-  name: '', type: 'musteri', phone: '', email: '', address: '', notes: '',
+  name: '', type: 'musteri', phone: '', email: '', address: '', notes: '', taxNumber: '',
   balance: 0, totalDebit: 0, totalCredit: 0
 };
 
@@ -15,9 +15,10 @@ const emptyTransaction: Omit<CariTransaction, 'id' | 'createdAt'> = {
 };
 
 export default function AccountsPage() {
-  const { accounts, cariTransactions, addAccount, updateAccount, deleteAccount, addCariTransaction, deleteCariTransaction, addCashEntry } = useData();
+  const { accounts, cariTransactions, addAccount, updateAccount, deleteAccount, addCariTransaction, deleteCariTransaction, addCashEntry, firmaBilgileri } = useData();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [viewMode, setViewMode] = useState<'card' | 'list'>(() => (localStorage.getItem('cari_view_mode') as 'card' | 'list') || 'card');
   
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editAccount, setEditAccount] = useState<CariAccount | null>(null);
@@ -165,44 +166,97 @@ export default function AccountsPage() {
   }
 
   function handlePrintAccount(account: CariAccount) {
-    const { label } = getBalanceLabel(account.balance);
+    const txs = getAccountTransactions(account.id);
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
+
+    const f = firmaBilgileri || {};
+    const firmaHtml = `
+      <div style="text-align: left; margin-bottom: 20px; font-size: 14px;">
+        <strong style="font-size: 18px;">${f.firmaAdi || 'BİZİM FİRMA'}</strong><br/>
+        ${f.adres ? f.adres + '<br/>' : ''}
+        ${f.telefon ? 'Tel: ' + f.telefon + '<br/>' : ''}
+        ${f.email ? 'E-posta: ' + f.email + '<br/>' : ''}
+        ${f.vergiDairesi ? 'VD: ' + f.vergiDairesi : ''} ${f.vergiNo ? 'VN: ' + f.vergiNo : ''}
+      </div>
+    `;
+
+    const karsiTarafHtml = `
+      <div style="text-align: right; margin-bottom: 20px; font-size: 14px;">
+        <strong style="font-size: 18px;">Sayın / Firma:</strong> <span style="font-size: 18px;">${account.name}</span><br/>
+        ${account.phone ? 'Tel: ' + account.phone + '<br/>' : ''}
+        ${account.address ? account.address + '<br/>' : ''}
+        ${account.taxNumber ? 'Vergi No / TCKN: ' + account.taxNumber + '<br/>' : ''}
+      </div>
+    `;
+
+    const txsHtml = `
+      <table style="width: 100%; border-collapse: collapse; margin-top: 20px; text-align: left;" border="1">
+        <thead>
+          <tr>
+            <th style="padding: 10px; background: #f5f5f5;">Tarih</th>
+            <th style="padding: 10px; background: #f5f5f5;">Açıklama</th>
+            <th style="padding: 10px; background: #f5f5f5;">İşlem Tipi</th>
+            <th style="padding: 10px; background: #f5f5f5; text-align: right;">Tutar</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${txs.length === 0 ? '<tr><td colspan="4" style="text-align: center; padding: 10px;">İşlem bulunamadı</td></tr>' : ''}
+          ${txs.slice().reverse().map(tx => `
+            <tr>
+              <td style="padding: 10px;">${new Date(tx.date).toLocaleDateString('tr-TR')}</td>
+              <td style="padding: 10px;">${tx.description}</td>
+              <td style="padding: 10px;">${getTxTypeLabel(tx.type)}</td>
+              <td style="padding: 10px; text-align: right;">${formatCurrency(tx.amount)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    let bakiyeMesaji = 'Hesabınızda bakiye bulunmamaktadır.';
+    if (account.balance < 0) {
+      bakiyeMesaji = `${account.name} — ${formatCurrency(Math.abs(account.balance))} borcunuz bulunmaktadır.`;
+    } else if (account.balance > 0) {
+      bakiyeMesaji = `${account.name} — ${formatCurrency(account.balance)} alacağınız bulunmaktadır.`;
+    }
 
     const html = `
       <html>
         <head>
-          <title>${account.name} - Cari Bakiye</title>
+          <title>${account.name} - Cari Bakiye Ekstresi</title>
           <style>
             body { font-family: 'Arial', sans-serif; padding: 40px; color: #333; }
-            .header { text-align: center; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 30px; }
-            .title { font-size: 24px; font-weight: bold; margin: 0 0 10px 0; }
-            .date { color: #666; font-size: 14px; }
-            .content { text-align: center; margin-bottom: 40px; }
-            .account-name { font-size: 20px; margin-bottom: 20px; color: #444; }
-            .balance { font-size: 28px; font-weight: bold; color: #000; padding: 30px; border: 2px dashed #999; border-radius: 12px; display: inline-block; background-color: #fcfcfc; }
+            .header { border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; }
+            .title { font-size: 24px; font-weight: bold; margin: 0 0 10px 0; text-align: center; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+            .date { color: #666; font-size: 14px; text-align: right; margin-top: -10px; margin-bottom: 30px; }
+            .balance-box { font-size: 20px; font-weight: bold; color: #000; padding: 20px; border: 2px dashed #999; border-radius: 12px; text-align: center; margin: 20px 0; background-color: #fcfcfc; }
             .footer { text-align: center; font-size: 12px; color: #999; margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; }
             @media print {
-              body { -webkit-print-color-adjust: exact; }
+              body { -webkit-print-color-adjust: exact; padding: 0; }
             }
           </style>
         </head>
         <body>
+          <h1 class="title">Bakiye Ekstresi</h1>
+          <div class="date">Tarih: ${new Date().toLocaleDateString('tr-TR')} Saat: ${new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})}</div>
           <div class="header">
-            <h1 class="title">Otomind Cari Bakiye Bildirimi</h1>
-            <p class="date">Tarih: ${new Date().toLocaleDateString('tr-TR')} Saat: ${new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})}</p>
+            ${firmaHtml}
+            ${karsiTarafHtml}
           </div>
-          <div class="content">
-            <p class="account-name"><strong>Sayın / Firma:</strong> ${account.name}</p>
-            <div class="balance">
-              ${account.balance === 0 ? 'Bakiye: 0.00 ₺' : 'Güncel Durum:<br/>' + label}
-            </div>
+          
+          <div class="balance-box">
+            ${bakiyeMesaji}
           </div>
+
+          <h3 style="margin-top: 30px;">Cari Hareket Tablosu</h3>
+          ${txsHtml}
+
           <div class="footer">
-            Bu belge Otomind otomasyon sistemi tarafından bilgilendirme amacıyla otomatik oluşturulmuştur.
+            Bu belge ${f.firmaAdi || 'sistem'} tarafından oluşturulmuştur.
           </div>
           <script>
-            window.onload = function() { window.print(); setTimeout(() => window.close(), 500); };
+            window.onload = function() { setTimeout(() => { window.print(); setTimeout(() => window.close(), 500); }, 500); };
           </script>
         </body>
       </html>
@@ -293,37 +347,93 @@ export default function AccountsPage() {
           <option value="tedarikci">Tedarikçi</option>
           <option value="diger">Diğer</option>
         </select>
+        
+        <div className="flex bg-overlay border border-divider rounded-xl p-1">
+          <button 
+            onClick={() => { setViewMode('card'); localStorage.setItem('cari_view_mode', 'card'); }}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 transition-colors ${viewMode === 'card' ? 'bg-primary text-main' : 'text-muted-light hover:text-main'}`}
+          >
+            <span className="material-symbols-outlined text-[18px]">grid_view</span> Kart
+          </button>
+          <button 
+            onClick={() => { setViewMode('list'); localStorage.setItem('cari_view_mode', 'list'); }}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 transition-colors ${viewMode === 'list' ? 'bg-primary text-main' : 'text-muted-light hover:text-main'}`}
+          >
+            <span className="material-symbols-outlined text-[18px]">format_list_bulleted</span> Liste
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filteredAccounts.map(account => {
-          const { color: bColor, label: bLabel } = getBalanceLabel(account.balance);
-
-          return (
-            <div key={account.id} onClick={() => setSelectedAccountForTx(account)} className="glass-panel card-hover p-4 rounded-xl cursor-pointer">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h3 className="text-main font-medium">{account.name}</h3>
-                  <p className="text-xs text-muted-dark uppercase">{account.type}</p>
+      {viewMode === 'card' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredAccounts.map(account => {
+            const { color: bColor, label: bLabel } = getBalanceLabel(account.balance);
+            return (
+              <div key={account.id} onClick={() => setSelectedAccountForTx(account)} className="glass-panel card-hover p-4 rounded-xl cursor-pointer">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="text-main font-medium">{account.name}</h3>
+                    <p className="text-xs text-muted-dark uppercase">{account.type}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={(e) => { e.stopPropagation(); handlePrintAccount(account); }} className="text-muted-dark hover:text-blue-400" title="Yazdır"><span className="material-symbols-outlined text-[16px]">print</span></button>
+                    <button onClick={(e) => { e.stopPropagation(); openEditAccount(account); }} className="text-muted-dark hover:text-main" title="Düzenle"><span className="material-symbols-outlined text-[16px]">edit</span></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(account.id); }} className="text-muted-dark hover:text-red-400" title="Sil"><span className="material-symbols-outlined text-[16px]">delete</span></button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={(e) => { e.stopPropagation(); handlePrintAccount(account); }} className="text-muted-dark hover:text-blue-400" title="Yazdır"><span className="material-symbols-outlined text-[16px]">print</span></button>
-                  <button onClick={(e) => { e.stopPropagation(); openEditAccount(account); }} className="text-muted-dark hover:text-main" title="Düzenle"><span className="material-symbols-outlined text-[16px]">edit</span></button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(account.id); }} className="text-muted-dark hover:text-red-400" title="Sil"><span className="material-symbols-outlined text-[16px]">delete</span></button>
+                
+                <div className="mt-4 pt-4 border-t border-divider-light flex flex-col gap-1">
+                  <p className={`text-lg font-bold ${bColor}`}>{bLabel}</p>
+                  {account.taxNumber && <p className="text-xs text-muted-light">VN: {account.taxNumber}</p>}
+                  <p className="text-[10px] text-muted-dark mt-1">Son İşlem: {formatDate(account.updatedAt)}</p>
                 </div>
               </div>
-              
-              <div className="mt-4 pt-4 border-t border-divider-light flex flex-col gap-1">
-                <p className={`text-lg font-bold ${bColor}`}>{bLabel}</p>
-                <p className="text-[10px] text-muted-dark">Son İşlem: {formatDate(account.updatedAt)}</p>
-              </div>
-            </div>
-          );
-        })}
-        {filteredAccounts.length === 0 && (
-          <div className="col-span-full text-center py-12 text-muted-dark">Kayıtlı cari bulunamadı</div>
-        )}
-      </div>
+            );
+          })}
+          {filteredAccounts.length === 0 && (
+            <div className="col-span-full text-center py-12 text-muted-dark">Kayıtlı cari bulunamadı</div>
+          )}
+        </div>
+      ) : (
+        <div className="glass-panel -mx-4 sm:mx-0 rounded-none sm:rounded-2xl border-l-0 border-r-0 sm:border-l sm:border-r overflow-hidden">
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-divider-light">
+                  <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">CARİ ADI</th>
+                  <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">TİPİ</th>
+                  <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">TELEFON</th>
+                  <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">VERGİ NO</th>
+                  <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">BAKİYE</th>
+                  <th className="text-right text-xs text-muted-dark font-medium px-4 py-3">İŞLEMLER</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAccounts.map(account => {
+                  const { color: bColor, label: bLabel } = getBalanceLabel(account.balance);
+                  return (
+                    <tr key={account.id} onClick={() => setSelectedAccountForTx(account)} className="border-b border-white/[0.04] hover:bg-overlay-border-light cursor-pointer">
+                      <td className="px-4 py-3 font-medium text-main">{account.name}</td>
+                      <td className="px-4 py-3"><span className="bg-overlay px-2 py-1 rounded text-xs text-muted-light uppercase">{account.type}</span></td>
+                      <td className="px-4 py-3 text-sm text-muted-light">{account.phone || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-muted-light">{account.taxNumber || '-'}</td>
+                      <td className={`px-4 py-3 text-sm font-bold ${bColor}`}>{bLabel}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={(e) => { e.stopPropagation(); handlePrintAccount(account); }} className="p-1.5 hover:bg-blue-500/20 rounded-lg text-muted hover:text-blue-400" title="Yazdır"><span className="material-symbols-outlined text-[16px]">print</span></button>
+                        <button onClick={(e) => { e.stopPropagation(); openEditAccount(account); }} className="p-1.5 hover:bg-white/10 rounded-lg text-muted hover:text-main" title="Düzenle"><span className="material-symbols-outlined text-[16px]">edit</span></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(account.id); }} className="p-1.5 hover:bg-red-500/20 rounded-lg text-muted hover:text-red-400" title="Sil"><span className="material-symbols-outlined text-[16px]">delete</span></button>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {filteredAccounts.length === 0 && (
+                  <tr><td colSpan={6} className="text-center py-12 text-muted-dark">Kayıtlı cari bulunamadı</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <Modal 
         isOpen={showAccountModal} 
@@ -378,6 +488,10 @@ export default function AccountsPage() {
             <div>
               <label className="text-xs text-muted mb-1 block">E-posta</label>
               <input value={accountForm.email || ''} onChange={e => setAccountForm(f => ({ ...f, email: e.target.value }))} className="input-field w-full" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted mb-1 block">Vergi / TC Kimlik No</label>
+              <input maxLength={11} value={accountForm.taxNumber || ''} onChange={e => setAccountForm(f => ({ ...f, taxNumber: e.target.value.replace(/[^0-9]/g, '') }))} className="input-field w-full" placeholder="Sadece rakam..." />
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs text-muted mb-1 block">Adres</label>

@@ -7,7 +7,7 @@ interface SidebarProps {
 }
 
 const menuItems: { id: PageType; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { id: 'dashboard', label: 'Anasayfa', icon: 'dashboard' },
   { id: 'sales', label: 'Satışlar', icon: 'point_of_sale' },
   { id: 'products', label: 'Ürünler', icon: 'inventory_2' },
   { id: 'custom-orders', label: 'Özel Siparişler', icon: 'design_services' },

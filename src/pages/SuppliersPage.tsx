@@ -11,6 +11,9 @@ const empty: Omit<Supplier, 'id' | 'createdAt'> = {
 export default function SuppliersPage() {
   const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useData();
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<'card' | 'list'>(() => {
+    return (localStorage.getItem('supplier_view_mode') as 'card' | 'list') || 'card';
+  });
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState<Supplier | null>(null);
   const [form, setForm] = useState(empty);
@@ -47,56 +50,125 @@ export default function SuppliersPage() {
         </button>
       </div>
 
-      <div className="relative">
-        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-muted-dark text-[18px]">search</span>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Firma adı veya kategori ara..."
-          className="w-full bg-overlay border border-divider rounded-xl pl-9 pr-4 py-2.5 text-sm text-main placeholder-slate-500 focus:outline-none focus:border-primary/50" />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-muted-dark text-[18px]">search</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Firma adı veya kategori ara..."
+            className="w-full bg-overlay border border-divider rounded-xl pl-9 pr-4 py-2.5 text-sm text-main placeholder-slate-500 focus:outline-none focus:border-primary/50" />
+        </div>
+        <div className="flex bg-overlay border border-divider rounded-xl p-1 shrink-0 h-[42px]">
+          <button 
+            onClick={() => { setViewMode('card'); localStorage.setItem('supplier_view_mode', 'card'); }}
+            className={`px-3 py-1 text-sm font-medium flex items-center gap-1 transition-colors rounded-lg ${viewMode === 'card' ? 'bg-primary text-main' : 'text-muted-light hover:text-main'}`}
+          >
+            <span className="material-symbols-outlined text-[18px]">grid_view</span> Kart
+          </button>
+          <button 
+            onClick={() => { setViewMode('list'); localStorage.setItem('supplier_view_mode', 'list'); }}
+            className={`px-3 py-1 text-sm font-medium flex items-center gap-1 transition-colors rounded-lg ${viewMode === 'list' ? 'bg-primary text-main' : 'text-muted-light hover:text-main'}`}
+          >
+            <span className="material-symbols-outlined text-[18px]">format_list_bulleted</span> Liste
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map(supplier => (
-          <div key={supplier.id} className="card-hover glass-panel rounded-2xl p-5">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#1E3050] flex items-center justify-center flex-shrink-0">
-                  <span className="material-symbols-outlined text-primary">factory</span>
+      {viewMode === 'card' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filtered.map(supplier => (
+            <div key={supplier.id} className="card-hover glass-panel rounded-2xl p-5">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#1E3050] flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined text-primary">factory</span>
+                  </div>
+                  <div>
+                    <p className="text-main font-semibold text-sm">{supplier.name}</p>
+                    <p className="text-muted text-xs">{supplier.category}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-main font-semibold text-sm">{supplier.name}</p>
-                  <p className="text-muted text-xs">{supplier.category}</p>
+                <div className="flex gap-1">
+                  <button onClick={() => openEdit(supplier)} className="p-1.5 hover:bg-overlay-hover rounded-lg text-muted hover:text-main">
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                  </button>
+                  <button onClick={() => setConfirmDelete(supplier.id)} className="p-1.5 hover:bg-red-500/20 rounded-lg text-muted hover:text-red-400">
+                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-1">
-                <button onClick={() => openEdit(supplier)} className="p-1.5 hover:bg-overlay-hover rounded-lg text-muted hover:text-main">
-                  <span className="material-symbols-outlined text-[16px]">edit</span>
-                </button>
-                <button onClick={() => setConfirmDelete(supplier.id)} className="p-1.5 hover:bg-red-500/20 rounded-lg text-muted hover:text-red-400">
-                  <span className="material-symbols-outlined text-[16px]">delete</span>
-                </button>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="material-symbols-outlined text-muted-dark text-[16px]">phone</span>
-                <span className="text-muted-light">{supplier.phone}</span>
-              </div>
-              {supplier.email && (
+              <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="material-symbols-outlined text-muted-dark text-[16px]">mail</span>
-                  <span className="text-muted-light">{supplier.email}</span>
+                  <span className="material-symbols-outlined text-muted-dark text-[16px]">phone</span>
+                  <span className="text-muted-light">{supplier.phone}</span>
                 </div>
+                {supplier.email && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="material-symbols-outlined text-muted-dark text-[16px]">mail</span>
+                    <span className="text-muted-light">{supplier.email}</span>
+                  </div>
+                )}
+              </div>
+              {supplier.notes && (
+                <p className="text-xs text-muted-dark mt-4 pt-3 border-t border-divider-light">{supplier.notes}</p>
               )}
             </div>
-            {supplier.notes && (
-              <p className="text-xs text-muted-dark mt-4 pt-3 border-t border-divider-light">{supplier.notes}</p>
-            )}
+          ))}
+          {filtered.length === 0 && (
+            <div className="col-span-full glass-panel rounded-2xl p-12 text-center text-muted-dark">Tedarikçi bulunamadı</div>
+          )}
+        </div>
+      ) : (
+        <div className="glass-panel -mx-4 sm:mx-0 rounded-none sm:rounded-2xl border-l-0 border-r-0 sm:border-l sm:border-r overflow-hidden">
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-divider-light bg-overlay-light/50">
+                  <th className="px-4 py-3 text-xs font-semibold text-muted-dark uppercase tracking-wider">Firma Adı</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-muted-dark uppercase tracking-wider">Kategori</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-muted-dark uppercase tracking-wider">İletişim</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-muted-dark uppercase tracking-wider w-[100px]">İşlem</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-divider-light">
+                {filtered.map(supplier => (
+                  <tr key={supplier.id} className="hover:bg-overlay-hover transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-[#1E3050] flex items-center justify-center flex-shrink-0">
+                          <span className="material-symbols-outlined text-primary text-[16px]">factory</span>
+                        </div>
+                        <span className="text-sm font-semibold text-main">{supplier.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-muted font-medium bg-overlay-light border border-divider px-2 py-1 rounded-lg">{supplier.category}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        {supplier.phone && <span className="text-xs text-muted-light flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">phone</span>{supplier.phone}</span>}
+                        {supplier.email && <span className="text-xs text-muted-light flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">mail</span>{supplier.email}</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openEdit(supplier)} className="p-1.5 hover:bg-overlay-hover rounded-lg text-muted hover:text-main transition-colors">
+                          <span className="material-symbols-outlined text-[16px]">edit</span>
+                        </button>
+                        <button onClick={() => setConfirmDelete(supplier.id)} className="p-1.5 hover:bg-red-500/20 rounded-lg text-muted hover:text-red-400 transition-colors">
+                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={4} className="text-center py-12 text-muted-dark">Tedarikçi bulunamadı</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        ))}
-        {filtered.length === 0 && (
-          <div className="col-span-full glass-panel rounded-2xl p-12 text-center text-muted-dark">Tedarikçi bulunamadı</div>
-        )}
-      </div>
+        </div>
+      )}
 
       <Modal 
         isOpen={showModal} 

@@ -19,6 +19,7 @@ export interface Product {
   pattern?: string;
   materialId?: string; // hammadde ID
   materialAmount?: number; // kaç metre gidiyor
+  extraMaterials?: Array<{ materialId: string; amount: number; }>; // Ek hammaddeler
   purchasePrice: number;
   salePrice: number;
   stock: number;
@@ -39,6 +40,7 @@ export interface CustomOrder {
   carBrand: string;
   carModel: string;
   carYear?: string;
+  vehicleInfo?: string; // Serbest araç bilgisi
   productType: 'kilif' | 'minder' | 'aksesuar' | 'set';
   fabricType?: string;
   pattern?: string;
@@ -46,6 +48,7 @@ export interface CustomOrder {
   notes?: string;
   materialId?: string;
   materialAmount?: number;
+  extraMaterials?: Array<{ materialId: string; amount: number; }>;
   deductMaterial?: boolean; // Form'dan gelen geçici/kalıcı flag
   status: 'beklemede' | 'kargoda' | 'teslim_edildi';
   orderDate: string;
@@ -65,6 +68,8 @@ export interface Material {
   stockQty: number;
   minQty: number;
   unitCost: number;
+  unitCostUsd?: number;     // Dolar cinsinden birim fiyat
+  currency?: 'TRY' | 'USD'; // Hangi para birimiyle girildi
   supplierId?: string;
   notes?: string;
   createdAt: string;
@@ -84,6 +89,7 @@ export interface CariAccount {
   email?: string;
   address?: string;
   notes?: string;
+  taxNumber?: string;     // Vergi Kimlik Numarası veya TC Kimlik No
   balance: number;        // Bakiye (+ alacak, - borç)
   totalDebit: number;     // Toplam borç (bize olan)
   totalCredit: number;    // Toplam alacak (onlara olan)

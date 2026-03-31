@@ -21,22 +21,11 @@ export default function AnalyticsPage() {
       };
     }
 
-    sales.forEach(s => {
-      const key = s.date.substring(0, 7);
-      if (months[key]) months[key].income += s.totalPrice;
-    });
-
     cashEntries.forEach(e => {
-      if (e.type === 'cikis') {
-        const key = e.date.substring(0, 7);
-        if (months[key]) months[key].expense += e.amount;
-      }
-    });
-
-    customOrders.forEach(o => {
-      if (o.status === 'teslim_edildi' && o.deliveryDate) {
-         const key = o.deliveryDate.substring(0, 7);
-         if (months[key]) months[key].income += o.price;
+      const key = e.date.substring(0, 7);
+      if (months[key]) {
+        if (e.type === 'giris') months[key].income += e.amount;
+        else if (e.type === 'cikis') months[key].expense += e.amount;
       }
     });
 

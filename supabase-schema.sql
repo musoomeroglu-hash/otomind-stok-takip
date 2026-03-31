@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS products (
   channel TEXT,
   is_custom BOOLEAN DEFAULT false,
   barcode TEXT,
+  material_id TEXT,
+  material_amount NUMERIC DEFAULT 0,
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

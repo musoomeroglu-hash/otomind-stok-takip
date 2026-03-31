@@ -7,7 +7,7 @@ import Toast from '../components/Toast';
 import Modal from '../components/Modal';
 
 const empty: Omit<Material, 'id' | 'createdAt'> = {
-  name: '', type: 'kumas', unit: 'metre', stockQty: 0, minQty: 5, unitCost: 0, notes: '',
+  name: '', type: 'kumas', unit: 'metre', stockQty: 0, minQty: 5, unitCost: 0, unitCostUsd: 0, currency: 'TRY', notes: '',
 };
 
 // Kumaş türü olarak sayılacak type'lar
@@ -18,7 +18,7 @@ function isFabric(m: Material) {
 }
 
 export default function MaterialsPage() {
-  const { materials, suppliers, materialTypes, addMaterial, updateMaterial, deleteMaterial } = useData();
+  const { materials, suppliers, materialTypes, addMaterial, updateMaterial, deleteMaterial, usdRate } = useData();
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState<Material | null>(null);
@@ -47,9 +47,22 @@ export default function MaterialsPage() {
 
   function handleSave() {
     if (!form.name) { setToast({ msg: 'Hammadde adı zorunludur', type: 'error' }); return; }
-    if (editItem) { updateMaterial(editItem.id, form); setToast({ msg: 'Güncellendi', type: 'success' }); }
-    else { addMaterial(form); setToast({ msg: 'Eklendi', type: 'success' }); }
+    
+    // Calculate final unitCost based on currency
+    const finalForm = { ...form };
+    if (finalForm.currency === 'USD') {
+      finalForm.unitCost = (finalForm.unitCostUsd || 0) * (usdRate || Number(localStorage.getItem('otomind_usd_rate')) || 1);
+    } else {
+      finalForm.unitCostUsd = 0;
+    }
+
+    if (editItem) { updateMaterial(editItem.id, finalForm); setToast({ msg: 'Güncellendi', type: 'success' }); }
+    else { addMaterial(finalForm); setToast({ msg: 'Eklendi', type: 'success' }); }
     setShowModal(false);
+  }
+
+  function formatStock(val: unknown) {
+    return Number(val).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }
 
   function renderRow(m: Material) {
@@ -69,10 +82,14 @@ export default function MaterialsPage() {
         </div>
         <div className="text-right shrink-0">
           <p className={`text-sm font-bold ${isLow ? 'text-amber-400' : 'text-main'}`}>
-            {m.stockQty} {m.unit}
+            {formatStock(m.stockQty)} {m.unit}
             {isLow && <span className="material-symbols-outlined text-[13px] ml-1 align-middle">warning</span>}
           </p>
-          <p className="text-[11px] text-muted-dark">{formatCurrency(m.unitCost)}/{m.unit}</p>
+          <div className="text-[11px] text-muted-dark">
+            {m.currency === 'USD' ? (
+               <span className="text-green-400 font-medium">${m.unitCostUsd} <span className="text-muted text-[10px]">({formatCurrency(m.unitCost)})</span></span>
+            ) : formatCurrency(m.unitCost)}/{m.unit}
+          </div>
         </div>
         <p className="text-emerald-400 font-medium text-sm w-[90px] text-right shrink-0">{formatCurrency(m.stockQty * m.unitCost)}</p>
         <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -247,15 +264,41 @@ export default function MaterialsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-muted mb-1 block">Stok Miktarı</label>
-              <input type="number" value={form.stockQty} onChange={e => setForm(f => ({ ...f, stockQty: Number(e.target.value) }))} className="input-field w-full" />
+              <input type="number" step="0.1" min="0" value={form.stockQty} onChange={e => setForm(f => ({ ...f, stockQty: Number(e.target.value) }))} className="input-field w-full" />
             </div>
             <div>
-              <label className="text-xs text-muted mb-1 block">Minimum Stok</label>
-              <input type="number" value={form.minQty} onChange={e => setForm(f => ({ ...f, minQty: Number(e.target.value) }))} className="input-field w-full" />
+              <label className="text-xs text-muted mb-1 block">Minimum Stok Eşiği</label>
+              <input type="number" step="0.1" min="0" value={form.minQty} onChange={e => setForm(f => ({ ...f, minQty: Number(e.target.value) }))} className="input-field w-full" />
             </div>
-            <div>
-              <label className="text-xs text-muted mb-1 block">Birim Maliyet (₺)</label>
-              <input type="number" value={form.unitCost} onChange={e => setForm(f => ({ ...f, unitCost: Number(e.target.value) }))} className="input-field w-full" />
+            <div className="sm:col-span-2 grid grid-cols-2 gap-4 border border-divider-light p-3 rounded-xl bg-overlay/30">
+              <div className="col-span-2">
+                <label className="text-xs text-muted mb-1 block">Para Birimi</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-sm text-main cursor-pointer">
+                    <input type="radio" value="TRY" checked={form.currency === 'TRY'} onChange={() => setForm(f => ({ ...f, currency: 'TRY' }))} className="accent-[#E97226]" /> 🇹🇷 TRY
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-main cursor-pointer">
+                    <input type="radio" value="USD" checked={form.currency === 'USD'} onChange={() => setForm(f => ({ ...f, currency: 'USD' }))} className="accent-green-500" /> 🇺🇸 USD
+                  </label>
+                </div>
+              </div>
+              {form.currency === 'TRY' ? (
+                <div className="col-span-2">
+                  <label className="text-xs text-muted mb-1 block">Birim Fiyat (₺)</label>
+                  <input type="number" step="0.01" value={form.unitCost} onChange={e => setForm(f => ({ ...f, unitCost: Number(e.target.value) }))} className="input-field w-full" />
+                </div>
+              ) : (
+                <div className="col-span-2">
+                  <label className="text-xs text-muted mb-1 block">Birim Fiyat ($)</label>
+                  <div className="flex gap-2">
+                    <input type="number" step="0.01" value={form.unitCostUsd} onChange={e => setForm(f => ({ ...f, unitCostUsd: Number(e.target.value) }))} className="input-field flex-1" />
+                    <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 flex items-center justify-center whitespace-nowrap text-xs w-[130px]">
+                      ≈ {formatCurrency((form.unitCostUsd || 0) * (usdRate || 32.5))}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-dark mt-1">Anlık Kur: 1$ = {usdRate ? usdRate.toFixed(2) : 32.5}₺</p>
+                </div>
+              )}
             </div>
             <div>
               <label className="text-xs text-muted mb-1 block">Tedarikçi</label>
