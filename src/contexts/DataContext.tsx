@@ -205,7 +205,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setReminders(r);
         setCalendarEvents(calEv);
         setMaterialTypes(mt.length > 0 ? mt : MATERIAL_TYPES.map(mt2 => ({ id: uid(), value: mt2.value, label: mt2.label })));
-        setCashRegisters(cr.length > 0 ? cr : [{ id: 'default_onceki_kasa', name: 'Önceki Kasa', createdAt: new Date().toISOString() }]);
+        setCashRegisters(cr.length > 0 ? cr : [{ id: 'default_onceki_kasa', name: 'Ana Kasa', createdAt: new Date().toISOString() }]);
 
         // Varsayılan kanallar app_config'ten okuma (sales_channels jsonb string array)
         try {
@@ -453,6 +453,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       id: uid(), type: 'giris', category: 'satis', amount: s.totalPrice,
       description: `Satış Geliri: ${s.productName}`,
       paymentMethod: s.paymentMethod, date: s.date, createdAt: now,
+      cashRegisterId: s.cashRegisterId || 'default_onceki_kasa',
       relatedId: sId, relatedType: 'sale'
     };
     setCashEntries(prev => [...prev, cashItem]);

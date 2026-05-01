@@ -144,6 +144,7 @@ export interface Sale {
   totalPrice: number;
   channel: string;
   paymentMethod: 'nakit' | 'kredi_karti' | 'havale' | 'kapida';
+  cashRegisterId?: string;
   deductMaterial?: boolean; // stoktan düşülsün mü? Formdan geliyor
   notes?: string;
   date: string;

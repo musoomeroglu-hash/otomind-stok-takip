@@ -10,10 +10,11 @@ const empty: Omit<Sale, 'id' | 'createdAt'> = {
   channel: 'website', paymentMethod: 'kredi_karti', notes: '',
   deductMaterial: false,
   date: new Date().toISOString().split('T')[0],
+  cashRegisterId: '',
 };
 
 export default function SalesPage() {
-  const { sales, products, salesChannels, addSale, deleteSale } = useData();
+  const { sales, products, salesChannels, addSale, deleteSale, cashRegisters } = useData();
   const [search, setSearch] = useState('');
   const [filterChannel, setFilterChannel] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -28,7 +29,7 @@ export default function SalesPage() {
     const matchChannel = !filterChannel || s.channel === filterChannel;
     const matchType = !filterType || s.saleType === filterType;
     return matchSearch && matchChannel && matchType;
-  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }).sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
 
   const thisMonth = new Date().toISOString().substring(0, 7);
   const monthlyRevenue = sales.filter(s => s.date.startsWith(thisMonth)).reduce((s, sale) => s + sale.totalPrice, 0);
@@ -61,7 +62,7 @@ export default function SalesPage() {
           <h1 className="text-2xl font-bold text-main">Satışlar</h1>
           <p className="text-muted text-sm mt-1">{sales.length} satış kaydı</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-press flex items-center gap-2 bg-primary hover:bg-primary-hover text-main px-4 py-2.5 rounded-xl font-medium text-sm">
+        <button onClick={() => { setForm({ ...empty, cashRegisterId: cashRegisters[0]?.id || 'default_onceki_kasa' }); setShowModal(true); }} className="btn-press flex items-center gap-2 bg-primary hover:bg-primary-hover text-main px-4 py-2.5 rounded-xl font-medium text-sm">
           <span className="material-symbols-outlined text-[18px]">add</span>
           Satış Ekle
         </button>
@@ -246,6 +247,12 @@ export default function SalesPage() {
                 <option value="kredi_karti">Kredi Kartı</option>
                 <option value="havale">Havale/EFT</option>
                 <option value="kapida">Kapıda</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted mb-1 block">Hangi Kasaya Gidecek? *</label>
+              <select value={form.cashRegisterId} onChange={e => setForm(f => ({ ...f, cashRegisterId: e.target.value }))} className="input-field w-full">
+                {cashRegisters.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </div>
             <div>

@@ -304,13 +304,11 @@ export default function KasaPage() {
                   <>
                     <span className="material-symbols-outlined text-blue-400 text-[18px]">account_balance</span>
                     <span className="text-sm text-main font-medium flex-1">{r.name}</span>
+                    <button onClick={() => setEditingRegister({ id: r.id, name: r.name })} className="p-1.5 hover:bg-overlay-hover rounded-lg text-muted hover:text-main"><span className="material-symbols-outlined text-[16px]">edit</span></button>
                     {r.id === 'default_onceki_kasa' ? (
-                      <span className="text-[10px] bg-slate-500/20 text-slate-400 px-2 py-0.5 rounded">SİLİNEMEZ</span>
+                      <span className="text-[10px] bg-slate-500/20 text-slate-400 px-2 py-0.5 rounded ml-1">SİLİNEMEZ</span>
                     ) : (
-                      <>
-                        <button onClick={() => setEditingRegister({ id: r.id, name: r.name })} className="p-1.5 hover:bg-overlay-hover rounded-lg text-muted hover:text-main"><span className="material-symbols-outlined text-[16px]">edit</span></button>
-                        <button onClick={() => handleDeleteRegister(r.id)} className="p-1.5 hover:bg-red-500/20 rounded-lg text-muted hover:text-red-400"><span className="material-symbols-outlined text-[16px]">delete</span></button>
-                      </>
+                      <button onClick={() => handleDeleteRegister(r.id)} className="p-1.5 hover:bg-red-500/20 rounded-lg text-muted hover:text-red-400"><span className="material-symbols-outlined text-[16px]">delete</span></button>
                     )}
                   </>
                 )}
