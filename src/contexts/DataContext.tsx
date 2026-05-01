@@ -524,13 +524,60 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const deleteSale = useCallback(async (id: string) => {
+    const saleToDelete = sales.find(s => s.id === id);
+    if (saleToDelete) {
+      setProducts(prevProducts => {
+        const product = prevProducts.find(p => p.name === saleToDelete.productName);
+        if (product) {
+          const newStock = product.stock + saleToDelete.quantity;
+          if (isSupabaseConfigured()) {
+            sbUpdate(DB_TABLES.products, product.id, { stock: newStock });
+          }
+          
+          if (saleToDelete.deductMaterial) {
+            if (product.materialId && (product.materialAmount || 0) > 0) {
+              const addAmt = Number(product.materialAmount) * saleToDelete.quantity;
+              const matId = product.materialId;
+              setMaterials(prevMat => {
+                const mat = prevMat.find(m => m.id === matId);
+                if (mat) {
+                  const newQty = mat.stockQty + addAmt;
+                  if (isSupabaseConfigured()) sbUpdate(DB_TABLES.materials, matId, { stockQty: newQty });
+                  return prevMat.map(m => m.id === matId ? { ...m, stockQty: newQty } : m);
+                }
+                return prevMat;
+              });
+            }
+            if (product.extraMaterials && product.extraMaterials.length > 0) {
+              product.extraMaterials.forEach(em => {
+                if (em.materialId && em.amount > 0) {
+                  const addAmt = Number(em.amount) * saleToDelete.quantity;
+                  setMaterials(prevMat => {
+                    const mat = prevMat.find(m => m.id === em.materialId || m.type === em.materialId);
+                    if (mat) {
+                      const newQty = mat.stockQty + addAmt;
+                      if (isSupabaseConfigured()) sbUpdate(DB_TABLES.materials, mat.id, { stockQty: newQty });
+                      return prevMat.map(m => m.id === mat.id ? { ...m, stockQty: newQty } : m);
+                    }
+                    return prevMat;
+                  });
+                }
+              });
+            }
+          }
+          return prevProducts.map(p => p.id === product.id ? { ...p, stock: newStock } : p);
+        }
+        return prevProducts;
+      });
+    }
+
     setSales(prev => prev.filter(item => item.id !== id));
     setCashEntries(prev => prev.filter(c => !(c.relatedId === id && c.relatedType === 'sale')));
     if (isSupabaseConfigured()) {
       await sbDelete(DB_TABLES.sales, id);
       await supabase.from(DB_TABLES.cash_entries).delete().eq('related_id', id).eq('related_type', 'sale');
     }
-  }, []);
+  }, [sales]);
 
   // --- PURCHASES ---
   const addPurchase = useCallback(async (p: Omit<Purchase, 'id' | 'createdAt'>) => {
