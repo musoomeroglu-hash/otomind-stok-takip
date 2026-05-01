@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { useData } from '../contexts/DataContext';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import type { Sale } from '../types';
@@ -7,7 +8,7 @@ import Modal from '../components/Modal';
 
 const empty: Omit<Sale, 'id' | 'createdAt'> = {
   saleType: 'normal', productName: '', customerName: '', quantity: 1, unitPrice: 0, totalPrice: 0,
-  channel: 'website', paymentMethod: 'kredi_karti', notes: '',
+  channel: '', paymentMethod: 'kredi_karti', notes: '',
   deductMaterial: false,
   date: new Date().toISOString().split('T')[0],
   cashRegisterId: '',
@@ -22,6 +23,126 @@ export default function SalesPage() {
   const [form, setForm] = useState(empty);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
+
+  function setQuickRange(range: 'thisWeek' | 'thisMonth' | 'lastMonth' | 'last7' | 'last30') {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    switch (range) {
+      case 'thisWeek': {
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+        setExportStartDate(monday.toISOString().split('T')[0]);
+        setExportEndDate(todayStr);
+        break;
+      }
+      case 'thisMonth': {
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        setExportStartDate(firstDay.toISOString().split('T')[0]);
+        setExportEndDate(todayStr);
+        break;
+      }
+      case 'lastMonth': {
+        const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+        setExportStartDate(firstDay.toISOString().split('T')[0]);
+        setExportEndDate(lastDay.toISOString().split('T')[0]);
+        break;
+      }
+      case 'last7': {
+        const weekAgo = new Date(today);
+        weekAgo.setDate(today.getDate() - 6);
+        setExportStartDate(weekAgo.toISOString().split('T')[0]);
+        setExportEndDate(todayStr);
+        break;
+      }
+      case 'last30': {
+        const monthAgo = new Date(today);
+        monthAgo.setDate(today.getDate() - 29);
+        setExportStartDate(monthAgo.toISOString().split('T')[0]);
+        setExportEndDate(todayStr);
+        break;
+      }
+    }
+  }
+
+  function handleExportSalesExcel() {
+    if (!exportStartDate || !exportEndDate) {
+      setToast({ msg: 'Başlangıç ve bitiş tarihi seçiniz', type: 'error' });
+      return;
+    }
+
+    const exportData = sales.filter(s => s.date >= exportStartDate && s.date <= exportEndDate)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    if (exportData.length === 0) {
+      setToast({ msg: 'Seçilen tarih aralığında satış bulunamadı', type: 'error' });
+      return;
+    }
+
+    const totalRevenue = exportData.reduce((s, sale) => s + sale.totalPrice, 0);
+    const totalQuantity = exportData.reduce((s, sale) => s + sale.quantity, 0);
+    const aracOzel = exportData.filter(s => s.saleType === 'arac_ozel');
+    const normal = exportData.filter(s => s.saleType === 'normal');
+
+    // Sayfa 1: Satışlar
+    const rows = exportData.map(s => ({
+      'Tarih': s.date,
+      'Ürün Adı': s.productName,
+      'Müşteri': s.customerName,
+      'Satış Türü': s.saleType === 'arac_ozel' ? 'Araca Özel' : 'Normal',
+      'Kanal': s.channel,
+      'Adet': s.quantity,
+      'Birim Fiyat (₺)': s.unitPrice,
+      'Toplam (₺)': s.totalPrice,
+      'Ödeme Yöntemi': s.paymentMethod === 'nakit' ? 'Nakit'
+        : s.paymentMethod === 'kredi_karti' ? 'Kredi Kartı'
+        : s.paymentMethod === 'havale' ? 'Havale/EFT'
+        : s.paymentMethod === 'kapida' ? 'Kapıda'
+        : s.paymentMethod,
+      'Notlar': s.notes || '',
+    }));
+
+    // Sayfa 2: Özet
+    const summaryRows = [
+      { 'Bilgi': 'Rapor Başlangıç', 'Değer': exportStartDate },
+      { 'Bilgi': 'Rapor Bitiş', 'Değer': exportEndDate },
+      { 'Bilgi': 'Toplam Satış Adedi', 'Değer': exportData.length },
+      { 'Bilgi': 'Toplam Ürün Adedi', 'Değer': totalQuantity },
+      { 'Bilgi': 'Toplam Ciro (₺)', 'Değer': totalRevenue },
+      { 'Bilgi': 'Araca Özel Satış Sayısı', 'Değer': aracOzel.length },
+      { 'Bilgi': 'Araca Özel Ciro (₺)', 'Değer': aracOzel.reduce((s, x) => s + x.totalPrice, 0) },
+      { 'Bilgi': 'Normal Satış Sayısı', 'Değer': normal.length },
+      { 'Bilgi': 'Normal Satış Ciro (₺)', 'Değer': normal.reduce((s, x) => s + x.totalPrice, 0) },
+    ];
+
+    // Sayfa 3: Kanal Bazlı
+    const channelSummary: Record<string, { count: number; total: number }> = {};
+    exportData.forEach(s => {
+      const ch = s.channel || 'Diğer';
+      if (!channelSummary[ch]) channelSummary[ch] = { count: 0, total: 0 };
+      channelSummary[ch].count++;
+      channelSummary[ch].total += s.totalPrice;
+    });
+    const channelRows = Object.entries(channelSummary).map(([ch, data]) => ({
+      'Kanal': ch,
+      'Satış Sayısı': data.count,
+      'Toplam Ciro (₺)': data.total,
+    }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Satışlar');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Özet');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(channelRows), 'Kanal Bazlı');
+
+    XLSX.writeFile(wb, `Otomind_Satis_Raporu_${exportStartDate}_${exportEndDate}.xlsx`);
+    setToast({ msg: `${exportData.length} satış raporu indirildi`, type: 'success' });
+    setShowExportModal(false);
+  }
 
   const filtered = sales.filter(s => {
     const q = search.toLowerCase();
@@ -38,6 +159,7 @@ export default function SalesPage() {
 
   function handleSave() {
     if (!form.productName) { setToast({ msg: 'Ürün adı zorunludur', type: 'error' }); return; }
+    if (!form.channel) { setToast({ msg: 'Lütfen bir satış kanalı seçiniz', type: 'error' }); return; }
     const finalCustomerName = form.customerName || 'Perakende Müşteri';
     const totalPrice = form.quantity * form.unitPrice;
     addSale({ ...form, customerName: finalCustomerName, totalPrice });
@@ -62,10 +184,25 @@ export default function SalesPage() {
           <h1 className="text-2xl font-bold text-main">Satışlar</h1>
           <p className="text-muted text-sm mt-1">{sales.length} satış kaydı</p>
         </div>
-        <button onClick={() => { setForm({ ...empty, cashRegisterId: cashRegisters[0]?.id || 'default_onceki_kasa' }); setShowModal(true); }} className="btn-press flex items-center gap-2 bg-primary hover:bg-primary-hover text-main px-4 py-2.5 rounded-xl font-medium text-sm">
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          Satış Ekle
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              const today = new Date();
+              const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+              setExportStartDate(firstDay.toISOString().split('T')[0]);
+              setExportEndDate(today.toISOString().split('T')[0]);
+              setShowExportModal(true);
+            }}
+            className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 px-3 py-2.5 rounded-xl font-medium text-sm transition-colors"
+          >
+            <span className="material-symbols-outlined text-[18px]">download</span>
+            Excel Rapor
+          </button>
+          <button onClick={() => { setForm({ ...empty, cashRegisterId: cashRegisters[0]?.id || 'default_onceki_kasa' }); setShowModal(true); }} className="btn-press flex items-center gap-2 bg-primary hover:bg-primary-hover text-main px-4 py-2.5 rounded-xl font-medium text-sm">
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Satış Ekle
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -235,8 +372,9 @@ export default function SalesPage() {
               <input type="number" value={form.unitPrice} onChange={e => setForm(f => ({ ...f, unitPrice: Number(e.target.value) }))} className="input-field w-full" />
             </div>
             <div>
-              <label className="text-xs text-muted mb-1 block">Kanal</label>
+              <label className="text-xs text-muted mb-1 block">Kanal *</label>
               <select value={form.channel} onChange={e => setForm(f => ({ ...f, channel: e.target.value }))} className="input-field w-full">
+                <option value="" disabled>Seçiniz</option>
                 {channels.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -293,6 +431,74 @@ export default function SalesPage() {
         }
       >
         <p className="text-muted text-sm">Bu satış kaydını silmek istediğinize emin misiniz?</p>
+      </Modal>
+
+      <Modal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Satış Raporu İndir"
+        footer={
+          <>
+            <button onClick={() => setShowExportModal(false)} className="px-4 py-2 text-sm text-muted hover:text-main transition-colors">İptal</button>
+            <button onClick={handleExportSalesExcel} className="btn-press px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-main text-sm font-medium rounded-xl transition-colors flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">download</span>
+              İndir
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          {/* Hızlı Seçim */}
+          <div>
+            <label className="text-xs text-muted mb-2 block font-medium">Hızlı Seçim</label>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setQuickRange('thisWeek')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Bu Hafta</button>
+              <button onClick={() => setQuickRange('thisMonth')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Bu Ay</button>
+              <button onClick={() => setQuickRange('lastMonth')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Geçen Ay</button>
+              <button onClick={() => setQuickRange('last7')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Son 7 Gün</button>
+              <button onClick={() => setQuickRange('last30')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Son 30 Gün</button>
+            </div>
+          </div>
+
+          {/* Tarih Seçimi */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-muted mb-1 block">Başlangıç Tarihi *</label>
+              <input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="input-field w-full dark-calendar" />
+            </div>
+            <div>
+              <label className="text-xs text-muted mb-1 block">Bitiş Tarihi *</label>
+              <input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="input-field w-full dark-calendar" />
+            </div>
+          </div>
+
+          {/* Önizleme */}
+          {exportStartDate && exportEndDate && (() => {
+            const previewData = sales.filter(s => s.date >= exportStartDate && s.date <= exportEndDate);
+            const previewTotal = previewData.reduce((sum, s) => sum + s.totalPrice, 0);
+            return (
+              <div className="bg-overlay border border-divider rounded-xl p-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="material-symbols-outlined text-emerald-400 text-[18px]">info</span>
+                  <span className="text-muted-light">
+                    Seçilen aralıkta <strong className="text-main">{previewData.length}</strong> satış kaydı bulundu.
+                  </span>
+                </div>
+                <div className="mt-2 text-xs text-muted-dark">
+                  Toplam ciro: <strong className="text-emerald-400">{formatCurrency(previewTotal)}</strong>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Bilgilendirme */}
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 flex items-start gap-2">
+            <span className="material-symbols-outlined text-blue-400 text-[16px] mt-0.5 shrink-0">description</span>
+            <p className="text-blue-300/80 text-[11px] leading-relaxed">
+              Excel dosyası 3 sayfa içerir: <strong>Satışlar</strong> (tüm satış detayları), <strong>Özet</strong> (toplam ciro, adet vb.) ve <strong>Kanal Bazlı</strong> (her kanalın satış dağılımı).
+            </p>
+          </div>
+        </div>
       </Modal>
       <style>{`.input-field { background: var(--color-overlay); border: 1px solid var(--color-border-divider); border-radius: 0.75rem; padding: 0.625rem 0.75rem; color: inherit; font-size: 0.875rem; outline: none; } .input-field:focus { border-color: rgba(233,114,38,0.5); } .input-field option { background: var(--color-surface); color: var(--color-text-main); }`}</style>
     </div>

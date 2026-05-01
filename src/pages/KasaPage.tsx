@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { useData } from '../contexts/DataContext';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import type { CashEntry } from '../types';
@@ -35,6 +36,113 @@ export default function KasaPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [newRegisterName, setNewRegisterName] = useState('');
   const [editingRegister, setEditingRegister] = useState<{ id: string; name: string } | null>(null);
+
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
+
+  function setQuickRange(range: 'thisWeek' | 'thisMonth' | 'lastMonth' | 'last7' | 'last30') {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    switch (range) {
+      case 'thisWeek': {
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+        setExportStartDate(monday.toISOString().split('T')[0]);
+        setExportEndDate(todayStr);
+        break;
+      }
+      case 'thisMonth': {
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        setExportStartDate(firstDay.toISOString().split('T')[0]);
+        setExportEndDate(todayStr);
+        break;
+      }
+      case 'lastMonth': {
+        const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+        setExportStartDate(firstDay.toISOString().split('T')[0]);
+        setExportEndDate(lastDay.toISOString().split('T')[0]);
+        break;
+      }
+      case 'last7': {
+        const weekAgo = new Date(today);
+        weekAgo.setDate(today.getDate() - 6);
+        setExportStartDate(weekAgo.toISOString().split('T')[0]);
+        setExportEndDate(todayStr);
+        break;
+      }
+      case 'last30': {
+        const monthAgo = new Date(today);
+        monthAgo.setDate(today.getDate() - 29);
+        setExportStartDate(monthAgo.toISOString().split('T')[0]);
+        setExportEndDate(todayStr);
+        break;
+      }
+    }
+  }
+
+  function handleExportKasaExcel() {
+    if (!exportStartDate || !exportEndDate) {
+      setToast({ msg: 'Başlangıç ve bitiş tarihi seçiniz', type: 'error' });
+      return;
+    }
+
+    const exportData = cashEntries.filter(e => e.date >= exportStartDate && e.date <= exportEndDate)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    if (exportData.length === 0) {
+      setToast({ msg: 'Seçilen tarih aralığında işlem bulunamadı', type: 'error' });
+      return;
+    }
+
+    const totalIn = exportData.filter(e => e.type === 'giris').reduce((s, e) => s + e.amount, 0);
+    const totalOut = exportData.filter(e => e.type === 'cikis').reduce((s, e) => s + e.amount, 0);
+
+    // Sayfa 1: Kasa İşlemleri
+    const rows = exportData.map(e => ({
+      'Tarih': e.date,
+      'İşlem Türü': e.type === 'giris' ? 'GELİR' : 'GİDER',
+      'Kategori': CATEGORY_LABELS[e.category] || e.category,
+      'Açıklama': e.description,
+      'Tutar (₺)': e.type === 'giris' ? e.amount : -e.amount,
+      'Ödeme Yöntemi': METHOD_LABELS[e.paymentMethod || ''] || '',
+    }));
+
+    // Sayfa 2: Özet
+    const summaryRows = [
+      { 'Bilgi': 'Rapor Başlangıç', 'Değer': exportStartDate },
+      { 'Bilgi': 'Rapor Bitiş', 'Değer': exportEndDate },
+      { 'Bilgi': 'Toplam İşlem Sayısı', 'Değer': exportData.length },
+      { 'Bilgi': 'Toplam Gelir (₺)', 'Değer': totalIn },
+      { 'Bilgi': 'Toplam Gider (₺)', 'Değer': totalOut },
+      { 'Bilgi': 'Net Bakiye (₺)', 'Değer': totalIn - totalOut },
+    ];
+
+    // Sayfa 3: Kategori Bazlı
+    const categorySummary: Record<string, { count: number; total: number }> = {};
+    exportData.forEach(e => {
+      const cat = CATEGORY_LABELS[e.category] || e.category;
+      if (!categorySummary[cat]) categorySummary[cat] = { count: 0, total: 0 };
+      categorySummary[cat].count++;
+      categorySummary[cat].total += (e.type === 'giris' ? e.amount : -e.amount);
+    });
+    const categoryRows = Object.entries(categorySummary).map(([cat, data]) => ({
+      'Kategori': cat,
+      'İşlem Sayısı': data.count,
+      'Net Tutar (₺)': data.total,
+    }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Kasa İşlemleri');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Özet');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(categoryRows), 'Kategori Bazlı');
+
+    XLSX.writeFile(wb, `Otomind_Kasa_Raporu_${exportStartDate}_${exportEndDate}.xlsx`);
+    setToast({ msg: `${exportData.length} kasa işlemi raporu indirildi`, type: 'success' });
+    setShowExportModal(false);
+  }
 
   // Kasa filtreleme
   const filteredByRegister = cashEntries.filter(entry => {
@@ -129,7 +237,20 @@ export default function KasaPage() {
           <h1 className="text-2xl font-bold text-main">Kasa & Gelir-Gider</h1>
           <p className="text-muted text-sm mt-1">Nakit akışı ve finansal işlemler</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              const today = new Date();
+              const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+              setExportStartDate(firstDay.toISOString().split('T')[0]);
+              setExportEndDate(today.toISOString().split('T')[0]);
+              setShowExportModal(true);
+            }}
+            className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 px-3 py-2.5 rounded-xl font-medium text-sm transition-colors"
+          >
+            <span className="material-symbols-outlined text-[18px]">download</span>
+            Excel Rapor
+          </button>
           <button onClick={() => setShowRegisterModal(true)} className="flex items-center gap-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 px-3 py-2.5 rounded-xl font-medium text-sm transition-colors">
             <span className="material-symbols-outlined text-[18px]">account_balance</span>
             Kasa Yönetimi
@@ -142,7 +263,7 @@ export default function KasaPage() {
       </div>
 
       {/* Kasa Seçici */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide" style={{scrollbarWidth:'none'}}>
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
         <button onClick={() => setSelectedRegisterId('all')}
           className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${selectedRegisterId === 'all' ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-overlay border-divider text-muted hover:bg-overlay-hover'}`}>
           <span className="block">Tümü (Toplam)</span>
@@ -325,6 +446,79 @@ export default function KasaPage() {
           <button onClick={() => { confirmDelete && deleteCashEntry(confirmDelete); setConfirmDelete(null); setToast({ msg: 'İşlem silindi', type: 'success' }); }} className="flex-1 px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-main rounded-xl font-medium transition-colors">Sil</button>
         </>}>
         <p className="text-muted text-sm">Bu kasa işlemini silmek istediğinize emin misiniz?</p>
+      </Modal>
+
+      <Modal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Kasa Raporu İndir"
+        footer={
+          <>
+            <button onClick={() => setShowExportModal(false)} className="px-4 py-2 text-sm text-muted hover:text-main transition-colors">İptal</button>
+            <button onClick={handleExportKasaExcel} className="btn-press px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-main text-sm font-medium rounded-xl transition-colors flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">download</span>
+              İndir
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          {/* Hızlı Seçim */}
+          <div>
+            <label className="text-xs text-muted mb-2 block font-medium">Hızlı Seçim</label>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setQuickRange('thisWeek')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Bu Hafta</button>
+              <button onClick={() => setQuickRange('thisMonth')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Bu Ay</button>
+              <button onClick={() => setQuickRange('lastMonth')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Geçen Ay</button>
+              <button onClick={() => setQuickRange('last7')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Son 7 Gün</button>
+              <button onClick={() => setQuickRange('last30')} className="text-xs bg-overlay border border-divider hover:bg-overlay-hover text-muted-light px-3 py-1.5 rounded-lg transition-colors">Son 30 Gün</button>
+            </div>
+          </div>
+
+          {/* Tarih Seçimi */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-muted mb-1 block">Başlangıç Tarihi *</label>
+              <input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="input-field w-full dark-calendar" />
+            </div>
+            <div>
+              <label className="text-xs text-muted mb-1 block">Bitiş Tarihi *</label>
+              <input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="input-field w-full dark-calendar" />
+            </div>
+          </div>
+
+          {/* Önizleme */}
+          {exportStartDate && exportEndDate && (() => {
+            const previewData = cashEntries.filter(e => e.date >= exportStartDate && e.date <= exportEndDate);
+            const previewIn = previewData.filter(e => e.type === 'giris').reduce((s, e) => s + e.amount, 0);
+            const previewOut = previewData.filter(e => e.type === 'cikis').reduce((s, e) => s + e.amount, 0);
+            return (
+              <div className="bg-overlay border border-divider rounded-xl p-3 space-y-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="material-symbols-outlined text-emerald-400 text-[18px]">info</span>
+                  <span className="text-muted-light">
+                    Seçilen aralıkta <strong className="text-main">{previewData.length}</strong> işlem bulundu.
+                  </span>
+                </div>
+                <div className="flex gap-4 text-xs text-muted-dark">
+                  <span>Gelir: <strong className="text-emerald-400">{formatCurrency(previewIn)}</strong></span>
+                  <span>Gider: <strong className="text-rose-400">{formatCurrency(previewOut)}</strong></span>
+                  <span>Net: <strong className={previewIn - previewOut >= 0 ? 'text-main' : 'text-rose-400'}>{formatCurrency(previewIn - previewOut)}</strong></span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Bilgilendirme */}
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 flex items-start gap-2">
+            <span className="material-symbols-outlined text-blue-400 text-[16px] mt-0.5 shrink-0">description</span>
+            <p className="text-blue-300/80 text-[11px] leading-relaxed">
+              Excel dosyası 3 sayfa içerir: <strong>Kasa İşlemleri</strong> (tüm gelir/gider detayları),
+              <strong> Özet</strong> (toplam gelir, gider, net bakiye) ve
+              <strong> Kategori Bazlı</strong> (kategori dağılımı).
+            </p>
+          </div>
+        </div>
       </Modal>
 
       <style>{`

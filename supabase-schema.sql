@@ -208,6 +208,23 @@ ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS cash_register_id TEXT DEFAULT 
 -- products tablosuna konum sütunları ekle
 ALTER TABLE products ADD COLUMN IF NOT EXISTS location_sira INTEGER;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS location_civi INTEGER;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS extra_materials JSONB;
+
+-- sales (satışlar) tablosuna eksik sütunları ekle
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS cash_register_id TEXT;
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS deduct_material BOOLEAN;
+
+-- custom_orders (özel siparişler) tablosuna eksik sütunları ekle
+ALTER TABLE custom_orders ADD COLUMN IF NOT EXISTS material_id TEXT;
+ALTER TABLE custom_orders ADD COLUMN IF NOT EXISTS material_amount NUMERIC;
+ALTER TABLE custom_orders ADD COLUMN IF NOT EXISTS extra_materials JSONB;
+ALTER TABLE custom_orders ADD COLUMN IF NOT EXISTS deduct_material BOOLEAN;
+ALTER TABLE custom_orders ADD COLUMN IF NOT EXISTS is_paid BOOLEAN;
+ALTER TABLE custom_orders ADD COLUMN IF NOT EXISTS payment_method TEXT;
+ALTER TABLE custom_orders ADD COLUMN IF NOT EXISTS vehicle_info TEXT;
+
+-- purchases (alımlar) tablosuna eksik sütunları ekle
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS is_paid BOOLEAN;
 
 -- =====================================================
 -- Row Level Security (RLS)
