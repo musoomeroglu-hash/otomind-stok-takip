@@ -25,14 +25,14 @@ export default function SalesPage() {
 
   const filtered = sales.filter(s => {
     const q = search.toLowerCase();
-    const matchSearch = !q || s.productName.toLowerCase().includes(q) || s.customerName.toLowerCase().includes(q);
+    const matchSearch = !q || (s.productName || '').toLowerCase().includes(q) || (s.customerName || '').toLowerCase().includes(q);
     const matchChannel = !filterChannel || s.channel === filterChannel;
     const matchType = !filterType || s.saleType === filterType;
     return matchSearch && matchChannel && matchType;
   }).sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
 
   const thisMonth = new Date().toISOString().substring(0, 7);
-  const monthlyRevenue = sales.filter(s => s.date.startsWith(thisMonth)).reduce((s, sale) => s + sale.totalPrice, 0);
+  const monthlyRevenue = sales.filter(s => (s.date || '').startsWith(thisMonth)).reduce((s, sale) => s + sale.totalPrice, 0);
   const aracOzelTotal = sales.filter(s => s.saleType === 'arac_ozel').reduce((s, sale) => s + sale.totalPrice, 0);
   const normalTotal = sales.filter(s => s.saleType !== 'arac_ozel').reduce((s, sale) => s + sale.totalPrice, 0);
 
