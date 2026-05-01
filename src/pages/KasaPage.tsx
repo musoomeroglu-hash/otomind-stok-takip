@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { addTitle, addSubtitle, addSpacer, addHeaders, addDataRow, addTotalRow, addSummaryPair, saveExcel } from '../utils/excelHelper';
 import { useData } from '../contexts/DataContext';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import type { CashEntry } from '../types';
@@ -9,7 +10,7 @@ import Modal from '../components/Modal';
 const CATEGORY_LABELS: Record<string, string> = {
   satis: 'Satış Geliri', alim: 'Alım Gideri', maas: 'Maaş',
   kira: 'Kira', fatura: 'Fatura', kargo: 'Kargo',
-  reklam: 'Reklam', bakim: 'Bakım', diger: 'Diğer'
+  reklam: 'Reklam', bakim: 'Bakım', diger: 'Diğer', transfer: 'Transfer'
 };
 
 const METHOD_LABELS: Record<string, string> = {
@@ -17,7 +18,7 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 export default function KasaPage() {
-  const { cashEntries, addCashEntry, deleteCashEntry, cashRegisters, addCashRegister, updateCashRegister, deleteCashRegister } = useData();
+  const { cashEntries, addCashEntry, deleteCashEntry, addTransfer, deleteTransfer, cashRegisters, addCashRegister, updateCashRegister, deleteCashRegister } = useData();
 
   const [search, setSearch] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
@@ -40,6 +41,16 @@ export default function KasaPage() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportStartDate, setExportStartDate] = useState('');
   const [exportEndDate, setExportEndDate] = useState('');
+
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferForm, setTransferForm] = useState({
+    fromId: '',
+    toId: '',
+    amount: 0,
+    description: '',
+    date: new Date().toISOString().split('T')[0],
+  });
+  const [confirmDeleteTransferId, setConfirmDeleteTransferId] = useState<string | null>(null);
 
   function setQuickRange(range: 'thisWeek' | 'thisMonth' | 'lastMonth' | 'last7' | 'last30') {
     const today = new Date();
@@ -83,13 +94,14 @@ export default function KasaPage() {
     }
   }
 
-  function handleExportKasaExcel() {
+  async function handleExportKasaExcel() {
     if (!exportStartDate || !exportEndDate) {
       setToast({ msg: 'Başlangıç ve bitiş tarihi seçiniz', type: 'error' });
       return;
     }
 
-    const exportData = cashEntries.filter(e => e.date >= exportStartDate && e.date <= exportEndDate)
+    const exportData = cashEntries
+      .filter(e => e.date >= exportStartDate && e.date <= exportEndDate)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     if (exportData.length === 0) {
@@ -99,47 +111,84 @@ export default function KasaPage() {
 
     const totalIn = exportData.filter(e => e.type === 'giris').reduce((s, e) => s + e.amount, 0);
     const totalOut = exportData.filter(e => e.type === 'cikis').reduce((s, e) => s + e.amount, 0);
+    const net = totalIn - totalOut;
 
-    // Sayfa 1: Kasa İşlemleri
-    const rows = exportData.map(e => ({
-      'Tarih': e.date,
-      'İşlem Türü': e.type === 'giris' ? 'GELİR' : 'GİDER',
-      'Kategori': CATEGORY_LABELS[e.category] || e.category,
-      'Açıklama': e.description,
-      'Tutar (₺)': e.type === 'giris' ? e.amount : -e.amount,
-      'Ödeme Yöntemi': METHOD_LABELS[e.paymentMethod || ''] || '',
-    }));
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Otomind';
+    wb.created = new Date();
 
-    // Sayfa 2: Özet
-    const summaryRows = [
-      { 'Bilgi': 'Rapor Başlangıç', 'Değer': exportStartDate },
-      { 'Bilgi': 'Rapor Bitiş', 'Değer': exportEndDate },
-      { 'Bilgi': 'Toplam İşlem Sayısı', 'Değer': exportData.length },
-      { 'Bilgi': 'Toplam Gelir (₺)', 'Değer': totalIn },
-      { 'Bilgi': 'Toplam Gider (₺)', 'Değer': totalOut },
-      { 'Bilgi': 'Net Bakiye (₺)', 'Değer': totalIn - totalOut },
-    ];
+    // ── Sayfa 1: Kasa İşlemleri ──
+    const ws1 = wb.addWorksheet('Kasa İşlemleri');
+    const headers1 = ['Tarih', 'İşlem Türü', 'Kategori', 'Açıklama', 'Tutar', 'Ödeme Yöntemi'];
+    [13, 12, 20, 34, 16, 18].forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
 
-    // Sayfa 3: Kategori Bazlı
-    const categorySummary: Record<string, { count: number; total: number }> = {};
+    addTitle(ws1, 'OTOMİND — KASA RAPORU', headers1.length);
+    addSubtitle(ws1, `Dönem: ${exportStartDate}  →  ${exportEndDate}   |   ${exportData.length} işlem   |   Net: ${net.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`, headers1.length);
+    addSpacer(ws1, headers1.length);
+    addHeaders(ws1, headers1);
+
+    exportData.forEach((e, i) => {
+      const amount = e.type === 'giris' ? e.amount : -e.amount;
+      addDataRow(ws1, [
+        e.date,
+        e.type === 'giris' ? '▲ GELİR' : '▼ GİDER',
+        CATEGORY_LABELS[e.category] || e.category,
+        e.description,
+        amount,
+        METHOD_LABELS[e.paymentMethod || ''] || '',
+      ], i, { currencyColumns: [5], signedColumn: 5, centerColumns: [2, 6] });
+    });
+
+    addTotalRow(ws1,
+      ['', '', '', 'NET BAKİYE', net, ''],
+      { currencyColumns: [5], signedColumn: 5 }
+    );
+
+    // ── Sayfa 2: Özet ──
+    const ws2 = wb.addWorksheet('Özet');
+    ws2.getColumn(1).width = 32;
+    ws2.getColumn(2).width = 26;
+
+    addTitle(ws2, 'OTOMİND — KASA ÖZETİ', 2);
+    addSubtitle(ws2, `Dönem: ${exportStartDate}  →  ${exportEndDate}`, 2);
+    addSpacer(ws2, 2);
+
+    addSummaryPair(ws2, 'Rapor Başlangıç', exportStartDate);
+    addSummaryPair(ws2, 'Rapor Bitiş', exportEndDate);
+    addSpacer(ws2, 2, 4);
+    addSummaryPair(ws2, 'Toplam İşlem Sayısı', exportData.length, { bold: true });
+    addSpacer(ws2, 2, 4);
+    addSummaryPair(ws2, 'Toplam Gelir', totalIn, { isCurrency: true, positive: true, bold: true });
+    addSummaryPair(ws2, 'Toplam Gider', totalOut, { isCurrency: true, negative: true, bold: true });
+    addSummaryPair(ws2, 'Net Bakiye', net, { isCurrency: true, positive: net >= 0, negative: net < 0, bold: true });
+
+    // ── Sayfa 3: Kategori Bazlı ──
+    const ws3 = wb.addWorksheet('Kategori Bazlı');
+    [26, 14, 20].forEach((w, i) => { ws3.getColumn(i + 1).width = w; });
+
+    const catMap: Record<string, { count: number; total: number }> = {};
     exportData.forEach(e => {
       const cat = CATEGORY_LABELS[e.category] || e.category;
-      if (!categorySummary[cat]) categorySummary[cat] = { count: 0, total: 0 };
-      categorySummary[cat].count++;
-      categorySummary[cat].total += (e.type === 'giris' ? e.amount : -e.amount);
+      if (!catMap[cat]) catMap[cat] = { count: 0, total: 0 };
+      catMap[cat].count++;
+      catMap[cat].total += e.type === 'giris' ? e.amount : -e.amount;
     });
-    const categoryRows = Object.entries(categorySummary).map(([cat, data]) => ({
-      'Kategori': cat,
-      'İşlem Sayısı': data.count,
-      'Net Tutar (₺)': data.total,
-    }));
+    const catEntries = Object.entries(catMap).sort((a, b) => b[1].total - a[1].total);
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Kasa İşlemleri');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Özet');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(categoryRows), 'Kategori Bazlı');
+    addTitle(ws3, 'OTOMİND — KATEGORİ BAZLI RAPOR', 3);
+    addSubtitle(ws3, `Dönem: ${exportStartDate}  →  ${exportEndDate}`, 3);
+    addSpacer(ws3, 3);
+    addHeaders(ws3, ['Kategori', 'İşlem Sayısı', 'Net Tutar']);
 
-    XLSX.writeFile(wb, `Otomind_Kasa_Raporu_${exportStartDate}_${exportEndDate}.xlsx`);
+    catEntries.forEach(([cat, d], i) => {
+      addDataRow(ws3, [cat, d.count, d.total], i, { currencyColumns: [3], signedColumn: 3, centerColumns: [2] });
+    });
+    addTotalRow(ws3,
+      ['TOPLAM', catEntries.reduce((s, [, d]) => s + d.count, 0), net],
+      { currencyColumns: [3], signedColumn: 3 }
+    );
+
+    await saveExcel(wb, `Otomind_Kasa_Raporu_${exportStartDate}_${exportEndDate}.xlsx`);
     setToast({ msg: `${exportData.length} kasa işlemi raporu indirildi`, type: 'success' });
     setShowExportModal(false);
   }
@@ -182,6 +231,32 @@ export default function KasaPage() {
     setForm(emptyEntry);
   }
 
+  function openTransferModal() {
+    const registers = cashRegisters;
+    const fromId = selectedRegisterId !== 'all' ? selectedRegisterId : registers[0]?.id || '';
+    const toId = registers.find(r => r.id !== fromId)?.id || '';
+    setTransferForm({ fromId, toId, amount: 0, description: '', date: new Date().toISOString().split('T')[0] });
+    setShowTransferModal(true);
+  }
+
+  async function handleTransfer() {
+    const { fromId, toId, amount, description, date } = transferForm;
+    if (!fromId || !toId) { setToast({ msg: 'Kaynak ve hedef kasa seçiniz', type: 'error' }); return; }
+    if (fromId === toId) { setToast({ msg: 'Kaynak ve hedef kasa aynı olamaz', type: 'error' }); return; }
+    if (!amount || amount <= 0) { setToast({ msg: 'Geçerli bir tutar giriniz', type: 'error' }); return; }
+    const fromName = cashRegisters.find(r => r.id === fromId)?.name || fromId;
+    const toName = cashRegisters.find(r => r.id === toId)?.name || toId;
+    const desc = description.trim() || 'Kasa Transferi';
+    await addTransfer(
+      fromId, toId, amount,
+      `${desc} → ${toName}`,
+      `${desc} ← ${fromName}`,
+      date,
+    );
+    setToast({ msg: `${fromName} → ${toName} transferi kaydedildi`, type: 'success' });
+    setShowTransferModal(false);
+  }
+
   function handleAddRegister() {
     if (!newRegisterName.trim()) return;
     addCashRegister(newRegisterName.trim());
@@ -208,20 +283,27 @@ export default function KasaPage() {
 
   const renderEntry = (entry: CashEntry, type: 'giris' | 'cikis') => {
     const isGiris = type === 'giris';
-    const colorClass = isGiris ? 'emerald' : 'rose';
+    const isTransfer = entry.category === 'transfer';
+    const colorClass = isTransfer ? 'violet' : isGiris ? 'emerald' : 'rose';
     return (
       <div key={entry.id} className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.04] hover:bg-overlay-border-light group">
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-main font-medium truncate">{entry.description}</p>
+          <div className="flex items-center gap-1.5">
+            {isTransfer && <span className="material-symbols-outlined text-violet-400 text-[14px]">swap_horiz</span>}
+            <p className="text-sm text-main font-medium truncate">{entry.description}</p>
+          </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className={`text-[10px] bg-${colorClass}-500/10 text-${colorClass}-400 border border-${colorClass}-500/20 px-1.5 py-0.5 rounded`}>{CATEGORY_LABELS[entry.category] || entry.category}</span>
             <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded">{getRegisterName(entry.cashRegisterId || 'default_onceki_kasa')}</span>
             <span className="text-[11px] text-muted-dark">{formatDate(entry.date)}</span>
-            <span className="text-[11px] text-slate-600">{METHOD_LABELS[entry.paymentMethod || ''] || ''}</span>
+            {!isTransfer && <span className="text-[11px] text-slate-600">{METHOD_LABELS[entry.paymentMethod || ''] || ''}</span>}
           </div>
         </div>
         <p className={`text-${colorClass}-400 font-bold text-sm whitespace-nowrap`}>{isGiris ? '+' : '-'}{formatCurrency(entry.amount)}</p>
-        <button onClick={() => setConfirmDelete(entry.id)} className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 shrink-0">
+        <button
+          onClick={() => isTransfer && entry.transferId ? setConfirmDeleteTransferId(entry.transferId) : setConfirmDelete(entry.id)}
+          className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 shrink-0"
+        >
           <span className="material-symbols-outlined text-[16px]">delete</span>
         </button>
       </div>
@@ -255,6 +337,12 @@ export default function KasaPage() {
             <span className="material-symbols-outlined text-[18px]">account_balance</span>
             Kasa Yönetimi
           </button>
+          {cashRegisters.length >= 2 && (
+            <button onClick={openTransferModal} className="flex items-center gap-2 bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30 px-3 py-2.5 rounded-xl font-medium text-sm transition-colors">
+              <span className="material-symbols-outlined text-[18px]">swap_horiz</span>
+              Transfer
+            </button>
+          )}
           <button onClick={() => { setForm({...emptyEntry, cashRegisterId: selectedRegisterId !== 'all' ? selectedRegisterId : cashRegisters[0]?.id || 'default_onceki_kasa'}); setShowModal(true); }} className="btn-press flex items-center gap-2 bg-primary hover:bg-primary-hover text-main px-4 py-2.5 rounded-xl font-medium text-sm">
             <span className="material-symbols-outlined text-[18px]">add</span>
             Yeni İşlem Ekle
@@ -446,6 +534,73 @@ export default function KasaPage() {
           <button onClick={() => { confirmDelete && deleteCashEntry(confirmDelete); setConfirmDelete(null); setToast({ msg: 'İşlem silindi', type: 'success' }); }} className="flex-1 px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-main rounded-xl font-medium transition-colors">Sil</button>
         </>}>
         <p className="text-muted text-sm">Bu kasa işlemini silmek istediğinize emin misiniz?</p>
+      </Modal>
+
+      {/* Transfer Silme Onay Modalı */}
+      <Modal isOpen={!!confirmDeleteTransferId} onClose={() => setConfirmDeleteTransferId(null)} title="Transferi Sil" size="small"
+        footer={<>
+          <button onClick={() => setConfirmDeleteTransferId(null)} className="flex-1 px-4 py-2 text-sm border border-divider rounded-xl text-muted hover:text-main transition-colors">İptal</button>
+          <button onClick={() => { confirmDeleteTransferId && deleteTransfer(confirmDeleteTransferId); setConfirmDeleteTransferId(null); setToast({ msg: 'Transfer silindi', type: 'success' }); }} className="flex-1 px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-main rounded-xl font-medium transition-colors">Sil</button>
+        </>}>
+        <div className="space-y-2">
+          <p className="text-muted text-sm">Bu transferi silmek istediğinize emin misiniz?</p>
+          <p className="text-[11px] text-muted-dark bg-overlay border border-divider rounded-lg px-3 py-2">Her iki kasadaki transfer kaydı birlikte silinecek.</p>
+        </div>
+      </Modal>
+
+      {/* Transfer Modalı */}
+      <Modal isOpen={showTransferModal} onClose={() => setShowTransferModal(false)} title="Kasalar Arası Transfer"
+        footer={<>
+          <button onClick={() => setShowTransferModal(false)} className="px-4 py-2 text-sm text-muted hover:text-main transition-colors">İptal</button>
+          <button onClick={handleTransfer} className="btn-press px-5 py-2 bg-violet-500 hover:bg-violet-600 text-main text-sm font-medium rounded-xl transition-colors flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px]">swap_horiz</span>
+            Transfer Yap
+          </button>
+        </>}>
+        <div className="p-1 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted mb-1 block">Kaynak Kasa (Çıkış) *</label>
+              <select value={transferForm.fromId} onChange={e => setTransferForm({ ...transferForm, fromId: e.target.value })}
+                className="input-field select-dark w-full">
+                <option value="">Seçiniz</option>
+                {cashRegisters.map(r => <option key={r.id} value={r.id}>{r.name} — {formatCurrency(getRegisterBalance(r.id))}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted mb-1 block">Hedef Kasa (Giriş) *</label>
+              <select value={transferForm.toId} onChange={e => setTransferForm({ ...transferForm, toId: e.target.value })}
+                className="input-field select-dark w-full">
+                <option value="">Seçiniz</option>
+                {cashRegisters.filter(r => r.id !== transferForm.fromId).map(r => <option key={r.id} value={r.id}>{r.name} — {formatCurrency(getRegisterBalance(r.id))}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {transferForm.fromId && transferForm.toId && (
+            <div className="flex items-center justify-center gap-3 text-sm">
+              <span className="text-muted font-medium">{cashRegisters.find(r => r.id === transferForm.fromId)?.name}</span>
+              <span className="material-symbols-outlined text-violet-400 text-[20px]">arrow_forward</span>
+              <span className="text-muted font-medium">{cashRegisters.find(r => r.id === transferForm.toId)?.name}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs text-muted mb-1 block">Tutar (₺) *</label>
+            <input type="number" min="0" step="0.01" value={transferForm.amount || ''} onChange={e => setTransferForm({ ...transferForm, amount: parseFloat(e.target.value) || 0 })}
+              placeholder="0.00" className="input-field w-full" />
+          </div>
+          <div>
+            <label className="text-xs text-muted mb-1 block">Açıklama</label>
+            <input type="text" value={transferForm.description} onChange={e => setTransferForm({ ...transferForm, description: e.target.value })}
+              placeholder="Kasa Transferi" className="input-field w-full" />
+          </div>
+          <div>
+            <label className="text-xs text-muted mb-1 block">Tarih *</label>
+            <input type="date" value={transferForm.date} onChange={e => setTransferForm({ ...transferForm, date: e.target.value })}
+              className="input-field w-full dark-calendar" />
+          </div>
+        </div>
       </Modal>
 
       <Modal

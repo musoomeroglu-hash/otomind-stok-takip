@@ -51,6 +51,8 @@ interface DataContextType {
   deletePurchase: (id: string) => void;
   addCashEntry: (e: Omit<CashEntry, 'id' | 'createdAt'>) => void;
   deleteCashEntry: (id: string) => void;
+  addTransfer: (fromRegisterId: string, toRegisterId: string, amount: number, fromDesc: string, toDesc: string, date: string) => Promise<void>;
+  deleteTransfer: (transferId: string) => Promise<void>;
   addReminder: (r: Omit<Reminder, 'id' | 'createdAt'>) => void;
   updateReminder: (id: string, r: Partial<Reminder>) => void;
   deleteReminder: (id: string) => void;
@@ -719,6 +721,45 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured()) await sbDelete(DB_TABLES.cash_entries, id);
   }, []);
 
+  const addTransfer = useCallback(async (
+    fromRegisterId: string,
+    toRegisterId: string,
+    amount: number,
+    fromDesc: string,
+    toDesc: string,
+    date: string,
+  ) => {
+    const transferId = uid();
+    const createdAt = new Date().toISOString();
+    const outEntry: CashEntry = {
+      id: uid(), createdAt, transferId,
+      type: 'cikis', category: 'transfer',
+      description: fromDesc, amount,
+      cashRegisterId: fromRegisterId, date,
+    };
+    const inEntry: CashEntry = {
+      id: uid(), createdAt, transferId,
+      type: 'giris', category: 'transfer',
+      description: toDesc, amount,
+      cashRegisterId: toRegisterId, date,
+    };
+    setCashEntries(prev => [...prev, outEntry, inEntry]);
+    if (isSupabaseConfigured()) {
+      await sbInsert(DB_TABLES.cash_entries, outEntry);
+      await sbInsert(DB_TABLES.cash_entries, inEntry);
+    }
+  }, []);
+
+  const deleteTransfer = useCallback(async (transferId: string) => {
+    setCashEntries(prev => {
+      const toDelete = prev.filter(e => e.transferId === transferId);
+      if (isSupabaseConfigured()) {
+        toDelete.forEach(e => sbDelete(DB_TABLES.cash_entries, e.id));
+      }
+      return prev.filter(e => e.transferId !== transferId);
+    });
+  }, []);
+
   // --- REMINDERS ---
   const addReminder = useCallback(async (r: Omit<Reminder, 'id' | 'createdAt'>) => {
     const newItem: Reminder = { ...r, id: uid(), createdAt: new Date().toISOString() };
@@ -820,7 +861,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addSale, deleteSale,
       addPurchase, deletePurchase,
       addCashRegister, updateCashRegister, deleteCashRegister,
-      addCashEntry, deleteCashEntry,
+      addCashEntry, deleteCashEntry, addTransfer, deleteTransfer,
       addReminder, updateReminder, deleteReminder,
       addCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
       addMaterialType, updateMaterialType, deleteMaterialType, updateWhatsappConfig,

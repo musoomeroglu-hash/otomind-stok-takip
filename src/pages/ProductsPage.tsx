@@ -6,6 +6,8 @@ import { PRODUCT_CATEGORIES, FABRIC_TYPES, CAR_BRANDS } from '../types';
 import Toast from '../components/Toast';
 import Modal from '../components/Modal';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { addTitle, addSubtitle, addSpacer, addHeaders, addDataRow, addSectionHeader, saveExcel } from '../utils/excelHelper';
 
 const emptyProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
   name: '', category: 'kilif', skuCode: '', fabricType: 'jakar', color: '', pattern: '',
@@ -52,112 +54,138 @@ export default function ProductsPage() {
 
   const brands = [...new Set(products.map(p => p.carBrand).filter(Boolean))];
 
-  function handleExportExcel() {
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(products.map(p => {
-      const row: any = {
-        'Ürün Adı': p.name,
-        'Kategori': p.category,
-        'Marka': p.carBrand || '',
-        'Model': p.carModel || '',
-        'Yıl': p.carYear || '',
-        'SKU': p.skuCode,
-        'Kumaş Türü': p.fabricType,
-        'Renk': p.color || '',
-        'Desen': p.pattern || '',
-        'Hammadde (Kumaş) ID': p.materialId || '',
-        'Kullanılan Metre': p.materialAmount || 0,
-        'Alış Fiyatı': p.purchasePrice,
-        'Satış Fiyatı': p.salePrice,
-        'Stok': p.stock,
-        'Min Stok': p.minStock,
-        'Satış Kanalı': p.channel,
-        'Sıra No': p.locationSira || '',
-        'Çivi No': p.locationCivi || '',
-        'Notlar': p.notes || ''
-      };
-      for(let i = 0; i < 7; i++) {
-        row[`Ek Hammadde ${i+1} ID`] = p.extraMaterials?.[i]?.materialId || '';
-        row[`Ek Hammadde ${i+1} Miktar`] = p.extraMaterials?.[i]?.amount || 0;
-      }
-      return row;
-    }));
+  async function handleExportExcel() {
+    const today = new Date().toISOString().split('T')[0];
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Otomind';
+    wb.created = new Date();
 
-    // Hammadde Listesi Sekmesi
-    const materialsWs = XLSX.utils.json_to_sheet(materials.map(m => ({
-      'Hammadde ID': m.id,
-      'Adı': m.name,
-      'Tipi': m.type,
-      'Birim': m.unit,
-      'Stok': m.stockQty
-    })));
+    // ── Sayfa 1: Ürünler ──
+    const ws1 = wb.addWorksheet('Ürünler');
+    const headers1 = ['Ürün Adı', 'SKU', 'Kategori', 'Marka', 'Model', 'Yıl', 'Kumaş', 'Renk', 'Desen', 'Alış ₺', 'Satış ₺', 'Stok', 'Min Stok', 'Kanal', 'Sıra No', 'Çivi No', 'Notlar'];
+    const widths1 = [28, 14, 14, 14, 14, 12, 12, 12, 12, 12, 12, 8, 9, 14, 9, 9, 24];
+    widths1.forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
 
-    XLSX.utils.book_append_sheet(wb, ws, "Urunler");
-    XLSX.utils.book_append_sheet(wb, materialsWs, "Kumas_ve_Hammaddeler");
-    XLSX.writeFile(wb, `Otomind_Urunler_${new Date().toISOString().split('T')[0]}.xlsx`);
-    setToast({ msg: 'Ürünler Excel\'e dışa aktarıldı', type: 'success' });
+    addTitle(ws1, 'OTOMİND — ÜRÜN LİSTESİ', headers1.length);
+    addSubtitle(ws1, `${today}   |   ${products.length} ürün`, headers1.length);
+    addSpacer(ws1, headers1.length);
+    addHeaders(ws1, headers1);
+
+    products.forEach((p, i) => {
+      addDataRow(ws1, [
+        p.name, p.skuCode, p.category,
+        p.carBrand || '', p.carModel || '', p.carYear || '',
+        p.fabricType, p.color || '', p.pattern || '',
+        p.purchasePrice, p.salePrice,
+        p.stock, p.minStock,
+        p.channel,
+        p.locationSira ?? '', p.locationCivi ?? '',
+        p.notes || '',
+      ], i, { currencyColumns: [10, 11], centerColumns: [3, 7, 8, 12, 13, 15, 16] });
+    });
+
+    // ── Sayfa 2: Hammaddeler ──
+    const ws2 = wb.addWorksheet('Hammaddeler');
+    const headers2 = ['Hammadde ID', 'Adı', 'Tipi', 'Birim', 'Stok Miktarı'];
+    [22, 28, 18, 10, 14].forEach((w, i) => { ws2.getColumn(i + 1).width = w; });
+
+    addTitle(ws2, 'OTOMİND — HAMMADDE LİSTESİ', headers2.length);
+    addSubtitle(ws2, `${today}   |   ${materials.length} hammadde`, headers2.length);
+    addSpacer(ws2, headers2.length);
+    addHeaders(ws2, headers2);
+
+    materials.forEach((m, i) => {
+      addDataRow(ws2, [m.id, m.name, m.type, m.unit, m.stockQty], i, { centerColumns: [3, 4, 5] });
+    });
+
+    await saveExcel(wb, `Otomind_Urunler_${today}.xlsx`);
+    setToast({ msg: "Ürünler Excel'e dışa aktarıldı", type: 'success' });
   }
 
-  function handleDownloadTemplate() {
-    const wb = XLSX.utils.book_new();
-    
-    const rowTemplate: any = {
-      'Ürün Adı': 'Örnek Koltuk Kılıfı',
-      'SKU': 'KLF-001',
-      'Kategori': 'kilif',
-      'Marka': 'Toyota',
-      'Model': 'Corolla',
-      'Yıl': '2019-2024',
-      'Kumaş Türü': 'jakar',
-      'Renk': 'Siyah',
-      'Desen': 'Düz',
-      'Hammadde (Kumaş) ID': materials.length > 0 ? materials[0].id : '',
-      'Kullanılan Metre': 2.5,
-      'Alış Fiyatı': 500,
-      'Satış Fiyatı': 1000,
-      'Stok': 10,
-      'Min Stok': 2,
-      'Satış Kanalı': 'website',
-      'Sıra No': 3,
-      'Çivi No': 5,
-      'Notlar': 'Bu bir örnek satırdır.'
-    };
-    for(let i=1; i<=7; i++) {
-      rowTemplate[`Ek Hammadde ${i} ID`] = '';
-      rowTemplate[`Ek Hammadde ${i} Miktar`] = 0;
-    }
-    const templateData = [rowTemplate];
-    const wsUrunler = XLSX.utils.json_to_sheet(templateData);
+  async function handleDownloadTemplate() {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Otomind';
+    wb.created = new Date();
 
-    // 2. Referanslar
-    const aoa: any[][] = [];
-    aoa.push(['>>> BU SAYFA BİLGİ AMAÇLIDIR. ÜRÜNLERİ "Ürün_Yükleme_Sayfası"NA EKLERSİNİZ <<<']);
-    aoa.push([]);
-    
-    aoa.push(['KATEGORİ KODLARI']);
-    aoa.push(['KOD (Şablondaki Kategori sütununa yazılır)', 'AÇIKLAMA']);
-    PRODUCT_CATEGORIES.forEach(c => aoa.push([c.value, c.label]));
-    aoa.push([]);
+    // ── Sayfa 1: Ürün Yükleme Şablonu ──
+    const ws1 = wb.addWorksheet('Ürün_Yükleme_Sayfası');
+    const templateHeaders = [
+      'Ürün Adı', 'SKU', 'Kategori', 'Marka', 'Model', 'Yıl',
+      'Kumaş Türü', 'Renk', 'Desen',
+      'Hammadde (Kumaş) ID', 'Kullanılan Metre',
+      'Alış Fiyatı', 'Satış Fiyatı', 'Stok', 'Min Stok',
+      'Satış Kanalı', 'Sıra No', 'Çivi No', 'Notlar',
+      ...Array.from({ length: 7 }, (_, i) => [`Ek Hammadde ${i + 1} ID`, `Ek Hammadde ${i + 1} Miktar`]).flat(),
+    ];
+    const templateWidths = [
+      28, 14, 12, 14, 14, 12, 12, 12, 12, 22, 14, 12, 12, 8, 9, 14, 9, 9, 24,
+      ...Array.from({ length: 7 }, () => [20, 14]).flat(),
+    ];
+    templateWidths.forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
 
-    aoa.push(['KUMAŞ ETİKET KODLARI (Varyant İçin)']);
-    aoa.push(['KOD (Şablondaki Kumaş Türü sütununa yazılır)', 'AÇIKLAMA']);
-    FABRIC_TYPES.forEach(f => aoa.push([f.value, f.label]));
-    aoa.push([]);
+    addTitle(ws1, 'OTOMİND — TOPLU ÜRÜN YÜKLEME ŞABLONU', templateHeaders.length);
+    addSubtitle(ws1, 'Sarı satıra bakarak ürünlerinizi alt satırlara ekleyin. Kolon adlarını değiştirmeyin.', templateHeaders.length);
+    addSpacer(ws1, templateHeaders.length);
+    addHeaders(ws1, templateHeaders);
 
-    aoa.push(['GERÇEK HAMMADDE/STOK KODLARI (Sistemdeki Kumaşlarınız)']);
-    aoa.push(['HAMMADDE ID (Şablondaki Hammadde ID sütununa yazılır)', 'HAMMADDE ADI', 'STOK', 'BİRİM']);
-    materials.forEach(m => aoa.push([m.id, m.name, m.stockQty, m.unit]));
-    aoa.push([]);
+    // Örnek satır (sarı arka plan)
+    const exampleValues = [
+      'Örnek Koltuk Kılıfı', 'KLF-001', 'kilif', 'Toyota', 'Corolla', '2019-2024',
+      'jakar', 'Siyah', 'Düz',
+      materials.length > 0 ? materials[0].id : 'HAM-001', 2.5,
+      500, 1000, 10, 2,
+      'website', 3, 5, 'Bu bir örnek satırdır.',
+      ...Array.from({ length: 7 }, () => ['', 0]).flat(),
+    ];
+    const exRow = ws1.addRow(exampleValues as ExcelJS.CellValue[]);
+    exRow.height = 22;
+    exRow.eachCell({ includeEmpty: true }, (cell, col) => {
+      if (col <= templateHeaders.length) {
+        cell.style = {
+          font: { size: 10, name: 'Calibri', italic: true, color: { argb: 'FF92400E' } },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } },
+          alignment: { horizontal: typeof cell.value === 'number' ? 'right' : 'left', vertical: 'middle' },
+          border: { top: { style: 'thin', color: { argb: 'FFD97706' } }, bottom: { style: 'thin', color: { argb: 'FFD97706' } }, left: { style: 'thin', color: { argb: 'FFD97706' } }, right: { style: 'thin', color: { argb: 'FFD97706' } } },
+        };
+      }
+    });
 
-    aoa.push(['HAMMADDE TÜRLERİ (Ek Hammaddeler için kullanılır)']);
-    aoa.push(['TÜR KODU (Şablondaki Ek Hammadde ID sütunlarına yazılır)', 'TÜR ADI']);
-    materialTypes.forEach(t => aoa.push([t.value, t.label]));
-    const wsReferanslar = XLSX.utils.aoa_to_sheet(aoa);
+    // ── Sayfa 2: Referans Kodlar ──
+    const ws2 = wb.addWorksheet('Kodlar_ve_Kumaşlar');
+    [42, 28, 10, 10].forEach((w, i) => { ws2.getColumn(i + 1).width = w; });
 
-    XLSX.utils.book_append_sheet(wb, wsUrunler, "Ürün_Yükleme_Sayfası");
-    XLSX.utils.book_append_sheet(wb, wsReferanslar, "Kodlar_ve_Kumaşlar");
-    XLSX.writeFile(wb, `Otomind_Toplu_Urun_Sablonu.xlsx`);
-    
+    addTitle(ws2, 'REFERANS BİLGİLERİ — Bu sayfayı silmeyin', 4);
+    addSubtitle(ws2, 'Ürünleri "Ürün_Yükleme_Sayfası" sekmesine ekleyin. Bu sayfa yalnızca bilgi amaçlıdır.', 4);
+    addSpacer(ws2, 4);
+
+    addSectionHeader(ws2, 'KATEGORİ KODLARI', 2);
+    addHeaders(ws2, ['KOD', 'AÇIKLAMA']);
+    PRODUCT_CATEGORIES.forEach((c, i) => {
+      addDataRow(ws2, [c.value, c.label], i, { centerColumns: [1] });
+    });
+    addSpacer(ws2, 2);
+
+    addSectionHeader(ws2, 'KUMAŞ TÜRÜ KODLARI', 2);
+    addHeaders(ws2, ['KOD', 'AÇIKLAMA']);
+    FABRIC_TYPES.forEach((f, i) => {
+      addDataRow(ws2, [f.value, f.label], i, { centerColumns: [1] });
+    });
+    addSpacer(ws2, 2);
+
+    addSectionHeader(ws2, 'SİSTEMDEKİ HAMMADDELER / KUMAŞLAR', 4);
+    addHeaders(ws2, ['HAMMADDE ID', 'HAMMADDE ADI', 'STOK', 'BİRİM']);
+    materials.forEach((m, i) => {
+      addDataRow(ws2, [m.id, m.name, m.stockQty, m.unit], i, { centerColumns: [1, 3, 4] });
+    });
+    addSpacer(ws2, 2);
+
+    addSectionHeader(ws2, 'HAMMADDE TÜRLERİ (Ek Hammaddeler için)', 2);
+    addHeaders(ws2, ['TÜR KODU', 'TÜR ADI']);
+    materialTypes.forEach((t, i) => {
+      addDataRow(ws2, [t.value, t.label], i, { centerColumns: [1] });
+    });
+
+    await saveExcel(wb, 'Otomind_Toplu_Urun_Sablonu.xlsx');
     setToast({ msg: 'Örnek şablon indirildi', type: 'success' });
   }
 

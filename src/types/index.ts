@@ -177,13 +177,14 @@ export interface PurchaseItem {
 export interface CashEntry {
   id: string;
   type: 'giris' | 'cikis';         // Gelir mi, gider mi
-  category: 'satis' | 'alim' | 'maas' | 'kira' | 'fatura' | 'kargo' | 'reklam' | 'bakim' | 'diger';
+  category: 'satis' | 'alim' | 'maas' | 'kira' | 'fatura' | 'kargo' | 'reklam' | 'bakim' | 'diger' | 'transfer';
   description: string;
   amount: number;
   relatedId?: string;               // Otomatik yansıtmalar için (satış/alım ID)
   relatedType?: 'sale' | 'purchase' | 'custom_order';
   paymentMethod?: 'nakit' | 'kredi_karti' | 'havale' | 'kapida';
   cashRegisterId?: string;          // Hangi kasaya ait
+  transferId?: string;              // Transfer çiftini bağlar (iki taraf aynı transferId'ye sahip)
   date: string;
   createdAt: string;
 }

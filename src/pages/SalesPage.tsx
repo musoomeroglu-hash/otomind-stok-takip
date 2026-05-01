@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { addTitle, addSubtitle, addSpacer, addHeaders, addDataRow, addTotalRow, addSummaryPair, saveExcel } from '../utils/excelHelper';
 import { useData } from '../contexts/DataContext';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import type { Sale } from '../types';
@@ -70,13 +71,14 @@ export default function SalesPage() {
     }
   }
 
-  function handleExportSalesExcel() {
+  async function handleExportSalesExcel() {
     if (!exportStartDate || !exportEndDate) {
       setToast({ msg: 'Başlangıç ve bitiş tarihi seçiniz', type: 'error' });
       return;
     }
 
-    const exportData = sales.filter(s => s.date >= exportStartDate && s.date <= exportEndDate)
+    const exportData = sales
+      .filter(s => s.date >= exportStartDate && s.date <= exportEndDate)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     if (exportData.length === 0) {
@@ -89,57 +91,87 @@ export default function SalesPage() {
     const aracOzel = exportData.filter(s => s.saleType === 'arac_ozel');
     const normal = exportData.filter(s => s.saleType === 'normal');
 
-    // Sayfa 1: Satışlar
-    const rows = exportData.map(s => ({
-      'Tarih': s.date,
-      'Ürün Adı': s.productName,
-      'Müşteri': s.customerName,
-      'Satış Türü': s.saleType === 'arac_ozel' ? 'Araca Özel' : 'Normal',
-      'Kanal': s.channel,
-      'Adet': s.quantity,
-      'Birim Fiyat (₺)': s.unitPrice,
-      'Toplam (₺)': s.totalPrice,
-      'Ödeme Yöntemi': s.paymentMethod === 'nakit' ? 'Nakit'
-        : s.paymentMethod === 'kredi_karti' ? 'Kredi Kartı'
-        : s.paymentMethod === 'havale' ? 'Havale/EFT'
-        : s.paymentMethod === 'kapida' ? 'Kapıda'
-        : s.paymentMethod,
-      'Notlar': s.notes || '',
-    }));
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Otomind';
+    wb.created = new Date();
 
-    // Sayfa 2: Özet
-    const summaryRows = [
-      { 'Bilgi': 'Rapor Başlangıç', 'Değer': exportStartDate },
-      { 'Bilgi': 'Rapor Bitiş', 'Değer': exportEndDate },
-      { 'Bilgi': 'Toplam Satış Adedi', 'Değer': exportData.length },
-      { 'Bilgi': 'Toplam Ürün Adedi', 'Değer': totalQuantity },
-      { 'Bilgi': 'Toplam Ciro (₺)', 'Değer': totalRevenue },
-      { 'Bilgi': 'Araca Özel Satış Sayısı', 'Değer': aracOzel.length },
-      { 'Bilgi': 'Araca Özel Ciro (₺)', 'Değer': aracOzel.reduce((s, x) => s + x.totalPrice, 0) },
-      { 'Bilgi': 'Normal Satış Sayısı', 'Değer': normal.length },
-      { 'Bilgi': 'Normal Satış Ciro (₺)', 'Değer': normal.reduce((s, x) => s + x.totalPrice, 0) },
-    ];
+    // ── Sayfa 1: Satışlar ──
+    const ws1 = wb.addWorksheet('Satışlar');
+    const headers1 = ['Tarih', 'Ürün Adı', 'Müşteri', 'Satış Türü', 'Kanal', 'Adet', 'Birim Fiyat', 'Toplam', 'Ödeme', 'Notlar'];
+    const widths1 =  [13,       28,          22,         14,           18,      7,      14,             14,        16,       26];
+    widths1.forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
 
-    // Sayfa 3: Kanal Bazlı
-    const channelSummary: Record<string, { count: number; total: number }> = {};
+    addTitle(ws1, 'OTOMİND — SATIŞ RAPORU', headers1.length);
+    addSubtitle(ws1, `Dönem: ${exportStartDate}  →  ${exportEndDate}   |   ${exportData.length} satış   |   Toplam: ${totalRevenue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`, headers1.length);
+    addSpacer(ws1, headers1.length);
+    addHeaders(ws1, headers1);
+
+    const payLabel = (m: string) =>
+      m === 'nakit' ? 'Nakit' : m === 'kredi_karti' ? 'Kredi Kartı' : m === 'havale' ? 'Havale/EFT' : m === 'kapida' ? 'Kapıda' : m;
+
+    exportData.forEach((s, i) => {
+      addDataRow(ws1, [
+        s.date, s.productName, s.customerName,
+        s.saleType === 'arac_ozel' ? 'Araca Özel' : 'Normal',
+        s.channel, s.quantity, s.unitPrice, s.totalPrice,
+        payLabel(s.paymentMethod), s.notes || '',
+      ], i, { currencyColumns: [7, 8], centerColumns: [4, 6, 9] });
+    });
+
+    addTotalRow(ws1,
+      ['TOPLAM', '', '', '', '', totalQuantity, '', totalRevenue, '', ''],
+      { currencyColumns: [8] }
+    );
+
+    // ── Sayfa 2: Özet ──
+    const ws2 = wb.addWorksheet('Özet');
+    ws2.getColumn(1).width = 32;
+    ws2.getColumn(2).width = 26;
+
+    addTitle(ws2, 'OTOMİND — SATIŞ ÖZETİ', 2);
+    addSubtitle(ws2, `Dönem: ${exportStartDate}  →  ${exportEndDate}`, 2);
+    addSpacer(ws2, 2);
+
+    addSummaryPair(ws2, 'Rapor Başlangıç', exportStartDate);
+    addSummaryPair(ws2, 'Rapor Bitiş', exportEndDate);
+    addSpacer(ws2, 2, 4);
+    addSummaryPair(ws2, 'Toplam Satış İşlemi', exportData.length, { bold: true });
+    addSummaryPair(ws2, 'Toplam Ürün Adedi', totalQuantity);
+    addSummaryPair(ws2, 'Toplam Ciro', totalRevenue, { isCurrency: true, positive: true, bold: true });
+    addSpacer(ws2, 2, 4);
+    addSummaryPair(ws2, 'Araca Özel — Satış Sayısı', aracOzel.length);
+    addSummaryPair(ws2, 'Araca Özel — Ciro', aracOzel.reduce((s, x) => s + x.totalPrice, 0), { isCurrency: true });
+    addSpacer(ws2, 2, 4);
+    addSummaryPair(ws2, 'Normal — Satış Sayısı', normal.length);
+    addSummaryPair(ws2, 'Normal — Ciro', normal.reduce((s, x) => s + x.totalPrice, 0), { isCurrency: true });
+
+    // ── Sayfa 3: Kanal Bazlı ──
+    const ws3 = wb.addWorksheet('Kanal Bazlı');
+    [24, 14, 20].forEach((w, i) => { ws3.getColumn(i + 1).width = w; });
+
+    const channelMap: Record<string, { count: number; total: number }> = {};
     exportData.forEach(s => {
       const ch = s.channel || 'Diğer';
-      if (!channelSummary[ch]) channelSummary[ch] = { count: 0, total: 0 };
-      channelSummary[ch].count++;
-      channelSummary[ch].total += s.totalPrice;
+      if (!channelMap[ch]) channelMap[ch] = { count: 0, total: 0 };
+      channelMap[ch].count++;
+      channelMap[ch].total += s.totalPrice;
     });
-    const channelRows = Object.entries(channelSummary).map(([ch, data]) => ({
-      'Kanal': ch,
-      'Satış Sayısı': data.count,
-      'Toplam Ciro (₺)': data.total,
-    }));
+    const channelEntries = Object.entries(channelMap).sort((a, b) => b[1].total - a[1].total);
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Satışlar');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Özet');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(channelRows), 'Kanal Bazlı');
+    addTitle(ws3, 'OTOMİND — KANAL BAZLI RAPOR', 3);
+    addSubtitle(ws3, `Dönem: ${exportStartDate}  →  ${exportEndDate}`, 3);
+    addSpacer(ws3, 3);
+    addHeaders(ws3, ['Satış Kanalı', 'Satış Sayısı', 'Toplam Ciro']);
 
-    XLSX.writeFile(wb, `Otomind_Satis_Raporu_${exportStartDate}_${exportEndDate}.xlsx`);
+    channelEntries.forEach(([ch, d], i) => {
+      addDataRow(ws3, [ch, d.count, d.total], i, { currencyColumns: [3], centerColumns: [2] });
+    });
+    addTotalRow(ws3,
+      ['TOPLAM', channelEntries.reduce((s, [, d]) => s + d.count, 0), channelEntries.reduce((s, [, d]) => s + d.total, 0)],
+      { currencyColumns: [3] }
+    );
+
+    await saveExcel(wb, `Otomind_Satis_Raporu_${exportStartDate}_${exportEndDate}.xlsx`);
     setToast({ msg: `${exportData.length} satış raporu indirildi`, type: 'success' });
     setShowExportModal(false);
   }
