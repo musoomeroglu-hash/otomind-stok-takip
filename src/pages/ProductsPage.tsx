@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
-import { formatCurrency, getCategoryLabel } from '../utils/helpers';
+import { formatCurrency, getCategoryLabel, toLocalDateStr } from '../utils/helpers';
 import type { Product } from '../types';
-import { PRODUCT_CATEGORIES, FABRIC_TYPES, CAR_BRANDS } from '../types';
+import { PRODUCT_CATEGORIES, FABRIC_TYPES } from '../types';
 import Toast from '../components/Toast';
 import Modal from '../components/Modal';
 import * as XLSX from 'xlsx';
@@ -13,7 +13,7 @@ const emptyProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
   name: '', category: 'kilif', skuCode: '', fabricType: 'jakar', color: '', pattern: '',
   materialId: '', materialAmount: 0, extraMaterials: [],
   purchasePrice: 0, salePrice: 0, stock: 0, minStock: 2, isCustom: false,
-  carBrand: '', carModel: '', carYear: '', channel: 'website',
+  channel: 'website',
   locationSira: undefined, locationCivi: undefined,
   notes: '',
 };
@@ -22,7 +22,6 @@ export default function ProductsPage() {
   const { products, materials, materialTypes, salesChannels, addProduct, updateProduct, deleteProduct } = useData();
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('');
-  const [filterBrand, setFilterBrand] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [editItem, setEditItem] = useState<Product | null>(null);
@@ -32,10 +31,9 @@ export default function ProductsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filtered = products.filter(p => {
     const q = search.toLowerCase();
-    const matchSearch = !q || p.name.toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q) || (p.carBrand || '').toLowerCase().includes(q);
+    const matchSearch = !q || p.name.toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
     const matchCat = !filterCat || p.category === filterCat;
-    const matchBrand = !filterBrand || p.carBrand === filterBrand;
-    return matchSearch && matchCat && matchBrand;
+    return matchSearch && matchCat;
   });
 
   function openAdd() { setForm(emptyProduct); setEditItem(null); setShowModal(true); }
@@ -52,18 +50,18 @@ export default function ProductsPage() {
     deleteProduct(id); setConfirmDelete(null); setToast({ msg: 'Ürün silindi', type: 'success' });
   }
 
-  const brands = [...new Set(products.map(p => p.carBrand).filter(Boolean))];
+
 
   async function handleExportExcel() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalDateStr(new Date());
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Otomind';
     wb.created = new Date();
 
     // ── Sayfa 1: Ürünler ──
     const ws1 = wb.addWorksheet('Ürünler');
-    const headers1 = ['Ürün Adı', 'SKU', 'Kategori', 'Marka', 'Model', 'Yıl', 'Kumaş', 'Renk', 'Desen', 'Alış ₺', 'Satış ₺', 'Stok', 'Min Stok', 'Kanal', 'Sıra No', 'Çivi No', 'Notlar'];
-    const widths1 = [28, 14, 14, 14, 14, 12, 12, 12, 12, 12, 12, 8, 9, 14, 9, 9, 24];
+    const headers1 = ['Ürün Adı', 'SKU', 'Kategori', 'Kumaş', 'Renk', 'Desen', 'Alış ₺', 'Satış ₺', 'Stok', 'Min Stok', 'Kanal', 'Sıra No', 'Çivi No', 'Notlar'];
+    const widths1 = [28, 14, 14, 12, 12, 12, 12, 12, 8, 9, 14, 9, 9, 24];
     widths1.forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
 
     addTitle(ws1, 'OTOMİND — ÜRÜN LİSTESİ', headers1.length);
@@ -74,14 +72,13 @@ export default function ProductsPage() {
     products.forEach((p, i) => {
       addDataRow(ws1, [
         p.name, p.skuCode, p.category,
-        p.carBrand || '', p.carModel || '', p.carYear || '',
         p.fabricType, p.color || '', p.pattern || '',
         p.purchasePrice, p.salePrice,
         p.stock, p.minStock,
         p.channel,
         p.locationSira ?? '', p.locationCivi ?? '',
         p.notes || '',
-      ], i, { currencyColumns: [10, 11], centerColumns: [3, 7, 8, 12, 13, 15, 16] });
+      ], i, { currencyColumns: [7, 8], centerColumns: [3, 4, 5, 9, 10, 12, 13] });
     });
 
     // ── Sayfa 2: Hammaddeler ──
@@ -110,7 +107,7 @@ export default function ProductsPage() {
     // ── Sayfa 1: Ürün Yükleme Şablonu ──
     const ws1 = wb.addWorksheet('Ürün_Yükleme_Sayfası');
     const templateHeaders = [
-      'Ürün Adı', 'SKU', 'Kategori', 'Marka', 'Model', 'Yıl',
+      'Ürün Adı', 'SKU', 'Kategori',
       'Kumaş Türü', 'Renk', 'Desen',
       'Hammadde (Kumaş) ID', 'Kullanılan Metre',
       'Alış Fiyatı', 'Satış Fiyatı', 'Stok', 'Min Stok',
@@ -118,7 +115,7 @@ export default function ProductsPage() {
       ...Array.from({ length: 7 }, (_, i) => [`Ek Hammadde ${i + 1} ID`, `Ek Hammadde ${i + 1} Miktar`]).flat(),
     ];
     const templateWidths = [
-      28, 14, 12, 14, 14, 12, 12, 12, 12, 22, 14, 12, 12, 8, 9, 14, 9, 9, 24,
+      28, 14, 12, 12, 12, 12, 22, 14, 12, 12, 8, 9, 14, 9, 9, 24,
       ...Array.from({ length: 7 }, () => [20, 14]).flat(),
     ];
     templateWidths.forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
@@ -130,7 +127,7 @@ export default function ProductsPage() {
 
     // Örnek satır (sarı arka plan)
     const exampleValues = [
-      'Örnek Koltuk Kılıfı', 'KLF-001', 'kilif', 'Toyota', 'Corolla', '2019-2024',
+      'Örnek Koltuk Kılıfı', 'KLF-001', 'kilif',
       'jakar', 'Siyah', 'Düz',
       materials.length > 0 ? materials[0].id : 'HAM-001', 2.5,
       500, 1000, 10, 2,
@@ -214,9 +211,6 @@ export default function ProductsPage() {
           addProduct({
             name: row['Ürün Adı'] || '',
             category: row['Kategori'] || 'kilif',
-            carBrand: row['Marka'] || '',
-            carModel: row['Model'] || '',
-            carYear: row['Yıl'] || '',
             skuCode: row['SKU'] || '',
             fabricType: row['Kumaş Türü'] || row['Kumaş'] || 'jakar',
             color: row['Renk'] || '',
@@ -274,18 +268,13 @@ export default function ProductsPage() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-muted-dark text-[18px]">search</span>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ürün adı, SKU, araç markası ara..."
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ürün adı veya SKU ara..."
             className="w-full bg-overlay border border-divider rounded-xl pl-9 pr-4 py-2.5 text-sm text-main placeholder-slate-500 focus:outline-none focus:border-primary/50" />
         </div>
         <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
           className="bg-overlay border border-divider rounded-xl px-3 py-2.5 text-sm text-muted-light focus:outline-none focus:border-primary/50">
           <option value="">Tüm Kategoriler</option>
           {PRODUCT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
-        <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)}
-          className="bg-overlay border border-divider rounded-xl px-3 py-2.5 text-sm text-muted-light focus:outline-none focus:border-primary/50">
-          <option value="">Tüm Markalar</option>
-          {brands.map(b => <option key={b} value={b!}>{b}</option>)}
         </select>
       </div>
 
@@ -297,7 +286,6 @@ export default function ProductsPage() {
               <tr className="border-b border-divider-light">
                 <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">ÜRÜN</th>
                 <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">KATEGORİ</th>
-                <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">ARAÇ</th>
                 <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">SKU</th>
                 <th className="text-left text-xs text-muted-dark font-medium px-4 py-3">KONUM</th>
                 <th className="text-right text-xs text-muted-dark font-medium px-4 py-3">SATIŞ FİYATI</th>
@@ -318,10 +306,6 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-xs bg-overlay px-2 py-1 rounded-lg text-muted-light">{getCategoryLabel(p.category)}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {p.carBrand ? <span className="text-sm text-muted-light">{p.carBrand} {p.carModel}</span>
-                        : <span className="text-slate-600 text-xs">Evrensel</span>}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-muted">{p.skuCode}</td>
                     <td className="px-4 py-3">
@@ -363,7 +347,7 @@ export default function ProductsPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-12 text-muted-dark">Ürün bulunamadı</td></tr>
+                <tr><td colSpan={7} className="text-center py-12 text-muted-dark">Ürün bulunamadı</td></tr>
               )}
             </tbody>
           </table>
@@ -401,31 +385,6 @@ export default function ProductsPage() {
             <div>
               <label className="text-xs text-muted mb-1 block">SKU Kodu *</label>
               <input value={form.skuCode} onChange={e => setForm(f => ({ ...f, skuCode: e.target.value }))} className="input-field w-full" placeholder="Örn: KLF-TC-01" />
-            </div>
-          </div>
-        </div>
-
-        {/* Araç Bilgileri */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="material-symbols-outlined text-blue-400 text-[18px]">directions_car</span>
-            <h3 className="text-main text-sm font-medium">Araç Bilgileri</h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs text-muted mb-1 block">Araç Markası</label>
-              <select value={form.carBrand} onChange={e => setForm(f => ({ ...f, carBrand: e.target.value }))} className="input-field w-full">
-                <option value="">Evrensel (Araç bağımsız)</option>
-                {CAR_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted mb-1 block">Araç Modeli</label>
-              <input value={form.carModel} onChange={e => setForm(f => ({ ...f, carModel: e.target.value }))} className="input-field w-full" placeholder="Örn: Corolla" />
-            </div>
-            <div>
-              <label className="text-xs text-muted mb-1 block">Model Yılı</label>
-              <input value={form.carYear} onChange={e => setForm(f => ({ ...f, carYear: e.target.value }))} className="input-field w-full" placeholder="Örn: 2018-2024" />
             </div>
           </div>
         </div>

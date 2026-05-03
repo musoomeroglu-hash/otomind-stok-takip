@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useData } from '../contexts/DataContext';
-import { formatCurrency, formatDate, getStatusColor, getStatusLabel } from '../utils/helpers';
+import { formatCurrency, formatDate, getStatusColor, getStatusLabel, toLocalDateStr } from '../utils/helpers';
 import type { CustomOrder } from '../types';
 import { ORDER_STATUSES } from '../types';
 import Toast from '../components/Toast';
@@ -10,7 +10,7 @@ const empty: Omit<CustomOrder, 'id' | 'createdAt'> = {
   customerName: '', customerPhone: '', carBrand: '', carModel: '', carYear: '', vehicleInfo: '',
   productType: 'kilif', fabricType: '', pattern: '', color: '', notes: '',
   materialId: '', materialAmount: 5, deductMaterial: true,
-  status: 'beklemede', orderDate: new Date().toISOString().split('T')[0],
+  status: 'beklemede', orderDate: toLocalDateStr(new Date()),
   deliveryDate: '', price: 0, isPaid: false, paymentMethod: 'nakit', channel: 'website',
 };
 

@@ -1,5 +1,5 @@
 import { useData } from '../contexts/DataContext';
-import { formatCurrency } from '../utils/helpers';
+import { formatCurrency, toLocalYearMonth } from '../utils/helpers';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from 'recharts';
 
 export default function AnalyticsPage() {
@@ -13,7 +13,7 @@ export default function AnalyticsPage() {
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      const key = d.toISOString().substring(0, 7);
+      const key = toLocalYearMonth(d);
       months[key] = {
         month: d.toLocaleDateString('tr-TR', { month: 'short', year: 'numeric' }),
         income: 0,

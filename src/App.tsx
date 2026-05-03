@@ -21,12 +21,22 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 
+const VALID_PAGES: PageType[] = ['dashboard', 'sales', 'products', 'custom-orders', 'materials', 'accounts', 'suppliers', 'purchases', 'kasa', 'delivery-calendar', 'reminders', 'analytics', 'settings'];
+
 function MainApp() {
-  const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
+  const [currentPage, setCurrentPage] = useState<PageType>(() => {
+    const saved = localStorage.getItem('otomind_currentPage') as PageType;
+    return saved && VALID_PAGES.includes(saved) ? saved : 'dashboard';
+  });
+
+  const handlePageChange = (page: PageType) => {
+    setCurrentPage(page);
+    localStorage.setItem('otomind_currentPage', page);
+  };
 
   return (
     <div className="flex h-screen bg-background text-slate-100 overflow-hidden">
-      <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
+      <Sidebar currentPage={currentPage} onPageChange={handlePageChange} />
       
       <main className="flex-1 w-full relative overflow-y-auto scrollbar-thin lg:ml-[260px]">
         {/* Background gradient effects */}

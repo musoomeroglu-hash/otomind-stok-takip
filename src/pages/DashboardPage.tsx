@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useData } from '../contexts/DataContext';
-import { formatCurrency, getStatusColor, getStatusLabel } from '../utils/helpers';
+import { formatCurrency, getStatusColor, getStatusLabel, toLocalYearMonth, toLocalDateStr } from '../utils/helpers';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function DashboardPage() {
@@ -10,13 +10,13 @@ export default function DashboardPage() {
   const lowStockMaterials = materials.filter(m => m.stockQty <= m.minQty);
 
   const todayDate = new Date();
-  const todayStr = todayDate.toISOString().split('T')[0];
-  const [selectedMonth, setSelectedMonth] = useState(todayStr.substring(0, 7));
+  const todayStr = toLocalDateStr(todayDate);
+  const [selectedMonth, setSelectedMonth] = useState(toLocalYearMonth(todayDate));
 
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(todayDate.getFullYear(), i, 1);
     return {
-      value: d.toISOString().substring(0, 7),
+      value: toLocalYearMonth(d),
       label: d.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })
     };
   });
@@ -46,7 +46,9 @@ export default function DashboardPage() {
   });
 
   customOrders.forEach(o => {
-    if (o.createdAt.startsWith(selectedMonth)) {
+    const orderDate = new Date(o.createdAt);
+    const orderYM = toLocalYearMonth(orderDate);
+    if (orderYM === selectedMonth) {
       const ch = o.channel ? o.channel.toUpperCase() : 'DİĞER';
       channelDataMap[ch] = (channelDataMap[ch] || 0) + o.price;
     }

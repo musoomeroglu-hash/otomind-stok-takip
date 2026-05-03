@@ -12,7 +12,7 @@ export default function LoginPage({ onLogin }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'otomind' && password === '4003') {
+    if (username === 'otomind' && password === '000000') {
       if (remember) {
         localStorage.setItem('otomind_auth', 'true');
       } else {

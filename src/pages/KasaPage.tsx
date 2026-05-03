@@ -2,7 +2,7 @@ import { useState } from 'react';
 import ExcelJS from 'exceljs';
 import { addTitle, addSubtitle, addSpacer, addHeaders, addDataRow, addTotalRow, addSummaryPair, saveExcel } from '../utils/excelHelper';
 import { useData } from '../contexts/DataContext';
-import { formatCurrency, formatDate } from '../utils/helpers';
+import { formatCurrency, formatDate, toLocalDateStr } from '../utils/helpers';
 import type { CashEntry } from '../types';
 import Toast from '../components/Toast';
 import Modal from '../components/Modal';
@@ -27,7 +27,7 @@ export default function KasaPage() {
   const emptyEntry: Omit<CashEntry, 'id' | 'createdAt'> = {
     type: 'cikis', category: 'diger', description: '', amount: 0,
     paymentMethod: 'nakit', cashRegisterId: cashRegisters[0]?.id || 'default_onceki_kasa',
-    date: new Date().toISOString().split('T')[0]
+    date: toLocalDateStr(new Date())
   };
 
   const [showModal, setShowModal] = useState(false);
@@ -48,46 +48,46 @@ export default function KasaPage() {
     toId: '',
     amount: 0,
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: toLocalDateStr(new Date()),
   });
   const [confirmDeleteTransferId, setConfirmDeleteTransferId] = useState<string | null>(null);
 
   function setQuickRange(range: 'thisWeek' | 'thisMonth' | 'lastMonth' | 'last7' | 'last30') {
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = toLocalDateStr(today);
 
     switch (range) {
       case 'thisWeek': {
         const monday = new Date(today);
         monday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
-        setExportStartDate(monday.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(monday));
         setExportEndDate(todayStr);
         break;
       }
       case 'thisMonth': {
         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        setExportStartDate(firstDay.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(firstDay));
         setExportEndDate(todayStr);
         break;
       }
       case 'lastMonth': {
         const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
-        setExportStartDate(firstDay.toISOString().split('T')[0]);
-        setExportEndDate(lastDay.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(firstDay));
+        setExportEndDate(toLocalDateStr(lastDay));
         break;
       }
       case 'last7': {
         const weekAgo = new Date(today);
         weekAgo.setDate(today.getDate() - 6);
-        setExportStartDate(weekAgo.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(weekAgo));
         setExportEndDate(todayStr);
         break;
       }
       case 'last30': {
         const monthAgo = new Date(today);
         monthAgo.setDate(today.getDate() - 29);
-        setExportStartDate(monthAgo.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(monthAgo));
         setExportEndDate(todayStr);
         break;
       }
@@ -224,7 +224,6 @@ export default function KasaPage() {
 
   function handleSave() {
     if (!form.amount || form.amount <= 0) { setToast({ msg: 'Geçerli bir tutar giriniz', type: 'error' }); return; }
-    if (!form.description.trim()) { setToast({ msg: 'Açıklama giriniz', type: 'error' }); return; }
     addCashEntry(form);
     setToast({ msg: 'İşlem kaydedildi', type: 'success' });
     setShowModal(false);
@@ -235,7 +234,7 @@ export default function KasaPage() {
     const registers = cashRegisters;
     const fromId = selectedRegisterId !== 'all' ? selectedRegisterId : registers[0]?.id || '';
     const toId = registers.find(r => r.id !== fromId)?.id || '';
-    setTransferForm({ fromId, toId, amount: 0, description: '', date: new Date().toISOString().split('T')[0] });
+    setTransferForm({ fromId, toId, amount: 0, description: '', date: toLocalDateStr(new Date()) });
     setShowTransferModal(true);
   }
 
@@ -324,8 +323,8 @@ export default function KasaPage() {
             onClick={() => {
               const today = new Date();
               const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-              setExportStartDate(firstDay.toISOString().split('T')[0]);
-              setExportEndDate(today.toISOString().split('T')[0]);
+              setExportStartDate(toLocalDateStr(firstDay));
+              setExportEndDate(toLocalDateStr(today));
               setShowExportModal(true);
             }}
             className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 px-3 py-2.5 rounded-xl font-medium text-sm transition-colors"

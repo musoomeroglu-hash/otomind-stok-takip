@@ -2,7 +2,7 @@ import { useState } from 'react';
 import ExcelJS from 'exceljs';
 import { addTitle, addSubtitle, addSpacer, addHeaders, addDataRow, addTotalRow, addSummaryPair, saveExcel } from '../utils/excelHelper';
 import { useData } from '../contexts/DataContext';
-import { formatCurrency, formatDate } from '../utils/helpers';
+import { formatCurrency, formatDate, toLocalDateStr, toLocalYearMonth } from '../utils/helpers';
 import type { Sale } from '../types';
 import Toast from '../components/Toast';
 import Modal from '../components/Modal';
@@ -11,7 +11,7 @@ const empty: Omit<Sale, 'id' | 'createdAt'> = {
   saleType: 'normal', productName: '', customerName: '', quantity: 1, unitPrice: 0, totalPrice: 0,
   channel: '', paymentMethod: 'kredi_karti', notes: '',
   deductMaterial: false,
-  date: new Date().toISOString().split('T')[0],
+  date: toLocalDateStr(new Date()),
   cashRegisterId: '',
 };
 
@@ -31,40 +31,40 @@ export default function SalesPage() {
 
   function setQuickRange(range: 'thisWeek' | 'thisMonth' | 'lastMonth' | 'last7' | 'last30') {
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = toLocalDateStr(today);
 
     switch (range) {
       case 'thisWeek': {
         const monday = new Date(today);
         monday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
-        setExportStartDate(monday.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(monday));
         setExportEndDate(todayStr);
         break;
       }
       case 'thisMonth': {
         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        setExportStartDate(firstDay.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(firstDay));
         setExportEndDate(todayStr);
         break;
       }
       case 'lastMonth': {
         const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
-        setExportStartDate(firstDay.toISOString().split('T')[0]);
-        setExportEndDate(lastDay.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(firstDay));
+        setExportEndDate(toLocalDateStr(lastDay));
         break;
       }
       case 'last7': {
         const weekAgo = new Date(today);
         weekAgo.setDate(today.getDate() - 6);
-        setExportStartDate(weekAgo.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(weekAgo));
         setExportEndDate(todayStr);
         break;
       }
       case 'last30': {
         const monthAgo = new Date(today);
         monthAgo.setDate(today.getDate() - 29);
-        setExportStartDate(monthAgo.toISOString().split('T')[0]);
+        setExportStartDate(toLocalDateStr(monthAgo));
         setExportEndDate(todayStr);
         break;
       }
@@ -184,7 +184,7 @@ export default function SalesPage() {
     return matchSearch && matchChannel && matchType;
   }).sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
 
-  const thisMonth = new Date().toISOString().substring(0, 7);
+  const thisMonth = toLocalYearMonth(new Date());
   const monthlyRevenue = sales.filter(s => (s.date || '').startsWith(thisMonth)).reduce((s, sale) => s + sale.totalPrice, 0);
   const aracOzelTotal = sales.filter(s => s.saleType === 'arac_ozel').reduce((s, sale) => s + sale.totalPrice, 0);
   const normalTotal = sales.filter(s => s.saleType !== 'arac_ozel').reduce((s, sale) => s + sale.totalPrice, 0);
@@ -221,8 +221,8 @@ export default function SalesPage() {
             onClick={() => {
               const today = new Date();
               const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-              setExportStartDate(firstDay.toISOString().split('T')[0]);
-              setExportEndDate(today.toISOString().split('T')[0]);
+              setExportStartDate(toLocalDateStr(firstDay));
+              setExportEndDate(toLocalDateStr(today));
               setShowExportModal(true);
             }}
             className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 px-3 py-2.5 rounded-xl font-medium text-sm transition-colors"

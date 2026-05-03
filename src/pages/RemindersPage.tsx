@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useData } from '../contexts/DataContext';
-import { formatDate } from '../utils/helpers';
+import { formatDate, toLocalDateStr } from '../utils/helpers';
 import type { Reminder } from '../types';
 import Toast from '../components/Toast';
 import Modal from '../components/Modal';
@@ -8,7 +8,7 @@ import Modal from '../components/Modal';
 import { sendWhatsappMessage } from '../utils/helpers';
 
 const empty: Omit<Reminder, 'id' | 'createdAt'> = {
-  title: '', description: '', priority: 'orta', date: new Date().toISOString().split('T')[0], time: '', completed: false, sendWhatsapp: false
+  title: '', description: '', priority: 'orta', date: toLocalDateStr(new Date()), time: '', completed: false, sendWhatsapp: false
 };
 
 export default function RemindersPage() {
@@ -102,7 +102,7 @@ export default function RemindersPage() {
                 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-xs">
                   <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${
-                    !r.completed && r.date < new Date().toISOString().split('T')[0] 
+                    !r.completed && r.date < toLocalDateStr(new Date()) 
                       ? 'bg-red-500/10 text-red-500 border border-red-500/20' 
                       : 'bg-overlay text-muted'
                   }`}>

@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useData } from '../contexts/DataContext';
-import { formatDate } from '../utils/helpers';
+import { formatDate, toLocalDateStr } from '../utils/helpers';
 import type { CalendarEvent } from '../types';
 import Toast from '../components/Toast';
 import Modal from '../components/Modal';
 
 const emptyEvent: Omit<CalendarEvent, 'id'> = {
-  title: '', date: new Date().toISOString().split('T')[0], type: 'teslimat', completed: false, description: '',
+  title: '', date: toLocalDateStr(new Date()), type: 'teslimat', completed: false, description: '',
 };
 
 export default function DeliveryCalendarPage() {
@@ -107,7 +107,7 @@ export default function DeliveryCalendarPage() {
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
               const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const isToday = dateStr === new Date().toISOString().split('T')[0];
+              const isToday = dateStr === toLocalDateStr(new Date());
               const dayEvents = allEvents.filter(e => e.date === dateStr);
               
               return (
@@ -132,7 +132,7 @@ export default function DeliveryCalendarPage() {
           <h3 className="text-main font-semibold">Yaklaşan Tarihler</h3>
           <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin">
             {allEvents
-              .filter(e => e.date >= new Date().toISOString().split('T')[0] && !e.completed)
+              .filter(e => e.date >= toLocalDateStr(new Date()) && !e.completed)
               .sort((a, b) => a.date.localeCompare(b.date))
               .slice(0, 8)
               .map(e => (
@@ -151,7 +151,7 @@ export default function DeliveryCalendarPage() {
                   </div>
                 </div>
               ))}
-            {allEvents.filter(e => e.date >= new Date().toISOString().split('T')[0] && !e.completed).length === 0 && (
+            {allEvents.filter(e => e.date >= toLocalDateStr(new Date()) && !e.completed).length === 0 && (
               <p className="text-muted-dark text-sm text-center py-4">Yaklaşan kayıt yok</p>
             )}
           </div>

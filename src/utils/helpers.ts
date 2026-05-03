@@ -82,3 +82,13 @@ export function sendWhatsappMessage(phone: string, text: string, apikey: string)
   const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encodedText}&apikey=${apikey}`;
   fetch(url, { mode: 'no-cors' }).catch(console.error);
 }
+
+/** Yerel tarihten YYYY-MM formatında ay string'i döndürür */
+export function toLocalYearMonth(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Yerel tarihten YYYY-MM-DD formatında tarih string'i döndürür */
+export function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}

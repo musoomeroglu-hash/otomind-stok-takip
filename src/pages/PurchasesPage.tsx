@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useData } from '../contexts/DataContext';
-import { formatCurrency, formatDate } from '../utils/helpers';
+import { formatCurrency, formatDate, toLocalDateStr } from '../utils/helpers';
 import type { Purchase, PurchaseItem } from '../types';
 import Toast from '../components/Toast';
 import Modal from '../components/Modal';
@@ -8,7 +8,7 @@ import Modal from '../components/Modal';
 const emptyItem: PurchaseItem = { name: '', quantity: 1, unitPrice: 0, totalPrice: 0 };
 const empty: Omit<Purchase, 'id' | 'createdAt'> = {
   supplierId: '', supplierName: '', items: [{ ...emptyItem }], totalAmount: 0,
-  isPaid: true, paymentMethod: 'Havale', notes: '', date: new Date().toISOString().split('T')[0],
+  isPaid: true, paymentMethod: 'Havale', notes: '', date: toLocalDateStr(new Date()),
 };
 
 export default function PurchasesPage() {

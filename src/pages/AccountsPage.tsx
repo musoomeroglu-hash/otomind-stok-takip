@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useData } from '../contexts/DataContext';
-import { formatCurrency, formatDate } from '../utils/helpers';
+import { formatCurrency, formatDate, toLocalDateStr } from '../utils/helpers';
 import type { CariAccount, CariTransaction } from '../types';
 import Toast from '../components/Toast';
 import Modal from '../components/Modal';
@@ -11,7 +11,7 @@ const emptyAccount: Omit<CariAccount, 'id' | 'createdAt' | 'updatedAt'> = {
 };
 
 const emptyTransaction: Omit<CariTransaction, 'id' | 'createdAt'> = {
-  accountId: '', type: 'borc', amount: 0, description: '', date: new Date().toISOString().split('T')[0]
+  accountId: '', type: 'borc', amount: 0, description: '', date: toLocalDateStr(new Date())
 };
 
 export default function AccountsPage() {
@@ -78,8 +78,8 @@ export default function AccountsPage() {
   }
 
   function handleSaveTransaction() {
-    if (!txForm.amount || txForm.amount <= 0 || !txForm.description) {
-      setToast({ msg: 'Geçerli tutar ve açıklama giriniz', type: 'error' });
+    if (!txForm.amount || txForm.amount <= 0) {
+      setToast({ msg: 'Geçerli bir tutar giriniz', type: 'error' });
       return;
     }
     
