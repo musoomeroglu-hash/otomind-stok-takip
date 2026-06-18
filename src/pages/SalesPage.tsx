@@ -180,7 +180,19 @@ export default function SalesPage() {
     const q = search.toLowerCase();
     const matchSearch = !q || (s.productName || '').toLowerCase().includes(q) || (s.customerName || '').toLowerCase().includes(q);
     const matchChannel = !filterChannel || s.channel === filterChannel;
-    const matchType = !filterType || s.saleType === filterType;
+    
+    let matchType = true;
+    if (filterType === 'arac_ozel' || filterType === 'normal') {
+      matchType = s.saleType === filterType;
+    } else if (filterType === 'minder') {
+      const p = products.find(prod => prod.name === s.productName);
+      matchType = p?.category === 'minder' || (s.productName || '').toLowerCase().includes('minder');
+    } else if (filterType === 'yastik') {
+      const p = products.find(prod => prod.name === s.productName);
+      const nameLower = (s.productName || '').toLowerCase();
+      matchType = p?.category === 'yastikseti' || nameLower.includes('yastık') || nameLower.includes('yastik');
+    }
+
     return matchSearch && matchChannel && matchType;
   }).sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
 
@@ -287,6 +299,8 @@ export default function SalesPage() {
           <option value="">Tüm Kategoriler</option>
           <option value="arac_ozel">Araca Özel Satış</option>
           <option value="normal">Normal Satış</option>
+          <option value="minder">Oto Minderi</option>
+          <option value="yastik">Oto Yastık</option>
         </select>
         <select value={filterChannel} onChange={e => setFilterChannel(e.target.value)}
           className="bg-overlay border border-divider rounded-xl px-3 py-2.5 text-sm text-muted-light focus:outline-none">
