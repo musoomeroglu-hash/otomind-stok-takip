@@ -182,9 +182,7 @@ export default function SalesPage() {
     const matchChannel = !filterChannel || s.channel === filterChannel;
     
     let matchType = true;
-    if (filterType === 'arac_ozel' || filterType === 'normal') {
-      matchType = s.saleType === filterType;
-    } else if (filterType === 'minder') {
+    if (filterType === 'minder') {
       const p = products.find(prod => prod.name === s.productName);
       matchType = p?.category === 'minder' || (s.productName || '').toLowerCase().includes('minder');
     } else if (filterType === 'yastik') {
@@ -297,8 +295,6 @@ export default function SalesPage() {
         <select value={filterType} onChange={e => setFilterType(e.target.value)}
           className="bg-overlay border border-divider rounded-xl px-3 py-2.5 text-sm text-muted-light focus:outline-none">
           <option value="">Tüm Kategoriler</option>
-          <option value="arac_ozel">Araca Özel Satış</option>
-          <option value="normal">Normal Satış</option>
           <option value="minder">Oto Minderi</option>
           <option value="yastik">Oto Yastık</option>
         </select>
@@ -381,6 +377,28 @@ export default function SalesPage() {
               <label className="text-xs text-muted mb-1 block">Ürün Adı *</label>
               <input list="product-list" value={form.productName} onChange={e => setForm(f => ({ ...f, productName: e.target.value }))} className="input-field w-full" placeholder="Ürün seç veya yaz" />
               <datalist id="product-list">{products.map(p => <option key={p.id} value={p.name} />)}</datalist>
+              {(() => {
+                const sp = products.find(p => p.name === form.productName);
+                if (sp && (sp.locationSira || sp.locationCivi)) {
+                  return (
+                    <div className="mt-2 flex items-center gap-4 text-xs">
+                      {sp.locationSira && (
+                        <div className="flex items-center gap-1.5 bg-blue-500/10 text-blue-400 px-2 py-1 rounded-lg border border-blue-500/20">
+                          <span className="material-symbols-outlined text-[14px]">view_column</span>
+                          Sıra: <strong>{sp.locationSira}</strong>
+                        </div>
+                      )}
+                      {sp.locationCivi && (
+                        <div className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-lg border border-emerald-500/20">
+                          <span className="material-symbols-outlined text-[14px]">push_pin</span>
+                          Çivi: <strong>{sp.locationCivi}</strong>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
             
             <div className="sm:col-span-2 p-3 bg-overlay-light border border-divider rounded-xl">
