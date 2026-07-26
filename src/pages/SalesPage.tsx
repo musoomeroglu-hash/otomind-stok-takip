@@ -375,29 +375,81 @@ export default function SalesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className="text-xs text-muted mb-1 block">Ürün Adı *</label>
-              <input list="product-list" value={form.productName} onChange={e => setForm(f => ({ ...f, productName: e.target.value }))} className="input-field w-full" placeholder="Ürün seç veya yaz" />
-              <datalist id="product-list">{products.map(p => <option key={p.id} value={p.name} />)}</datalist>
+              <input 
+                list="product-list" 
+                value={form.productName} 
+                onChange={e => {
+                  const val = e.target.value;
+                  const matched = products.find(p => p.name.trim().toLowerCase() === val.trim().toLowerCase());
+                  setForm(f => ({ 
+                    ...f, 
+                    productName: val,
+                    unitPrice: matched && matched.salePrice ? matched.salePrice : f.unitPrice
+                  }));
+                }} 
+                className="input-field w-full" 
+                placeholder="Ürün seç veya yaz" 
+              />
+              <datalist id="product-list">
+                {products.map(p => (
+                  <option key={p.id} value={p.name}>
+                    {p.name} (Stok: {p.stock} adet)
+                  </option>
+                ))}
+              </datalist>
               {(() => {
-                const sp = products.find(p => p.name === form.productName);
-                if (sp && (sp.locationSira || sp.locationCivi)) {
-                  return (
-                    <div className="mt-2 flex items-center gap-4 text-xs">
+                const sp = products.find(p => p.name.trim().toLowerCase() === form.productName.trim().toLowerCase());
+                if (!sp) return null;
+
+                const isOutOfStock = sp.stock <= 0;
+                const isLowStock = !isOutOfStock && sp.stock <= (sp.minStock || 5);
+
+                return (
+                  <div className="mt-2.5 p-3 rounded-xl bg-overlay/60 border border-divider flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold ${
+                        isOutOfStock 
+                          ? 'bg-red-500/15 text-red-400 border-red-500/30' 
+                          : isLowStock 
+                            ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' 
+                            : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      }`}>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {isOutOfStock ? 'error' : isLowStock ? 'warning' : 'inventory_2'}
+                        </span>
+                        <span>
+                          {isOutOfStock 
+                            ? `Stok Tükendi (${sp.stock} adet)` 
+                            : isLowStock 
+                              ? `Kritik Stok: ${sp.stock} adet` 
+                              : `Mevcut Stok: ${sp.stock} adet`}
+                        </span>
+                      </div>
+
+                      {sp.salePrice > 0 && (
+                        <div className="px-2.5 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[14px]">sell</span>
+                          Birim Fiyat: {formatCurrency(sp.salePrice)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       {sp.locationSira && (
-                        <div className="flex items-center gap-1.5 bg-blue-500/10 text-blue-400 px-2 py-1 rounded-lg border border-blue-500/20">
+                        <div className="flex items-center gap-1.5 bg-slate-500/10 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-500/20">
                           <span className="material-symbols-outlined text-[14px]">view_column</span>
                           Sıra: <strong>{sp.locationSira}</strong>
                         </div>
                       )}
                       {sp.locationCivi && (
-                        <div className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-lg border border-emerald-500/20">
+                        <div className="flex items-center gap-1.5 bg-slate-500/10 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-500/20">
                           <span className="material-symbols-outlined text-[14px]">push_pin</span>
                           Çivi: <strong>{sp.locationCivi}</strong>
                         </div>
                       )}
                     </div>
-                  );
-                }
-                return null;
+                  </div>
+                );
               })()}
             </div>
             
@@ -430,6 +482,18 @@ export default function SalesPage() {
             <div>
               <label className="text-xs text-muted mb-1 block">Adet</label>
               <input type="number" min="1" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: Number(e.target.value) }))} className="input-field w-full" />
+              {(() => {
+                const sp = products.find(p => p.name.trim().toLowerCase() === form.productName.trim().toLowerCase());
+                if (sp && form.quantity > sp.stock) {
+                  return (
+                    <p className="text-[11px] text-amber-400 mt-1 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[13px]">warning</span>
+                      Miktar ({form.quantity}), mevcut stoğun ({sp.stock}) üzerinde.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
             </div>
             <div>
               <label className="text-xs text-muted mb-1 block">Birim Fiyat (₺)</label>
